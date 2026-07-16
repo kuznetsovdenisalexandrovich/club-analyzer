@@ -518,6 +518,10 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
         .map(s => `[${fmtTime(s.start)}] ${s.text.trim().slice(0, 60)}`)
         .join('\n');
 
+      const slugInstruction = slug
+        ? `ОБЯЗАТЕЛЬНО используй именно этот slug, не придумывай свой: "${slug}"`
+        : `Придумай короткий slug сам, в формате sales_p03_l01_lecture`;
+
       const prompt = `Ты помощник, который анализирует лекции онлайн-клуба по продажам и маркетингу.
 
 Транскрипт с временными метками${caption ? ` (подпись: "${caption}")` : ''}:
@@ -525,9 +529,11 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 ${segSummary}
 ---
 
+${slugInstruction}
+
 Верни ТОЛЬКО валидный JSON без markdown-обёртки:
 {
-  "slug": "${slug || 'предложи slug: sales_p03_l01_lecture'}",
+  "slug": "${slug || 'sales_p03_l01_lecture'}",
   "title": "Точное название лекции до 80 символов",
   "description": "Что узнает участник — 2-3 предложения",
   "topics": ["тема 1","тема 2","тема 3"],
@@ -563,6 +569,7 @@ ${segSummary}
       const raw   = gData.choices[0].message.content;
       const clean = raw.replace(/```json|```/g,'').trim();
       const card  = JSON.parse(clean);
+      if (slug) card.slug = slug; // подстраховка: если сам вписал slug — модель его не переопределит
 
       card.link    = link || '(ссылка не указана)';
       card.link_vk = linkVk || '';
