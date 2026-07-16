@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Анализатор контента клуба</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222636;
+    --border: #2e3347;
+    --accent: #5b6ef5;
+    --accent-glow: rgba(91, 110, 245, 0.15);
+    --success: #3ecf8e;
+    --warning: #f5a623;
+    --text: #e8eaf0;
+    --text-muted: #6b7280;
+    --text-dim: #9ca3af;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+
+  .container { max-width: 780px; margin: 0 auto; }
+
+  header {
+    margin-bottom: 40px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-glow);
+    border: 1px solid rgba(91,110,245,0.3);
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 28px 0;
+    flex-wrap: wrap;
+  }
+
+  .pipe-step {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .pipe-step.active {
+    color: var(--accent);
+    border-color: rgba(91,110,245,0.4);
+    background: var(--accent-glow);
+  }
+
+  .pipe-arrow { color: var(--border); font-size: 14px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-num {
+    width: 22px; height: 22px;
+    background: var(--accent);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .upload-icon { font-size: 36px; margin-bottom: 12px; }
+
+  .upload-label {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .upload-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .file-info {
+    display: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    font-size: 13px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .file-info.visible { display: flex; }
+
+  .file-icon { font-size: 20px; }
+
+  .file-name { font-weight: 500; flex: 1; }
+
+  .file-size { color: var(--text-muted); }
+
+  /* Inputs */
+  .field { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  input[type=text], input[type=password], textarea, select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input[type=text]:focus, input[type=password]:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  input[type=password] { font-family: var(--mono); letter-spacing: 0.1em; }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  .key-row {
+    display: flex; gap: 8px; align-items: flex-end;
+  }
+
+  .key-row input { flex: 1; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    width: 100%;
+    justify-content: center;
+    padding: 13px;
+    font-size: 15px;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: #6b7ef8;
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-sm {
+    padding: 8px 14px;
+    font-size: 13px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Progress */
+  .progress-wrap { display: none; }
+  .progress-wrap.visible { display: block; }
+
+  .progress-stages { margin-bottom: 16px; }
+
+  .stage {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .stage:last-child { border-bottom: none; }
+
+  .stage.done { color: var(--success); }
+  .stage.active { color: var(--text); }
+  .stage.error { color: #f87171; }
+
+  .stage-icon { width: 20px; text-align: center; font-size: 16px; }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result-wrap { display: none; }
+  .result-wrap.visible { display: block; }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .result-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--success);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .result-actions { display: flex; gap: 8px; }
+
+  .result-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .result-block-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .result-content {
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .slug-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .slug-key {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 3px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .slug-arrow { color: var(--border); }
+
+  .slug-link {
+    font-size: 13px;
+    color: var(--text-dim);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
+
+  .tag {
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .json-out {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: #a5b4fc;
+    padding: 14px;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .copy-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Error */
+  .error-box {
+    display: none;
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #fca5a5;
+    margin-top: 12px;
+  }
+
+  .error-box.visible { display: block; }
+
+  /* Info note */
+  .note {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex; gap: 6px;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  .note-icon { flex-shrink: 0; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab {
+    padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: all 0.15s;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Dictionary table */
+  .dict-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .dict-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-muted); border-bottom: 1px solid var(--border);
+  }
+  .dict-table td { padding: 10px 12px; border-bottom: 1px solid rgba(46,51,71,0.5); vertical-align: top; }
+  .dict-table tr:last-child td { border-bottom: none; }
+  .dict-table .key-cell { font-family: var(--mono); color: var(--accent); font-size: 12px; }
+  .dict-table .title-cell { font-weight: 500; }
+  .dict-table .link-cell { color: var(--text-muted); font-size: 12px; word-break: break-all; }
+
+  .empty-dict {
+    text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="badge">Инструмент клуба</div>
+    <h1>Анализатор видео-контента</h1>
+    <p class="subtitle">Загружайте аудио или видео из вашего Telegram-клуба — инструмент транскрибирует через Whisper и создаст карточку для словаря с ключом, названием, тегами и описанием.</p>
+
+    <div class="pipeline">
+      <span class="pipe-step active">🎬 Видео/Аудио</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-step">🎙 Whisper</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-step">🤖 Claude</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-step">📖 Словарь</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-step">🤖 Бот</span>
+    </div>
+  </header>
+
+  <!-- API Keys -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">1</span> API ключи</div>
+
+    <div class="field">
+      <label>OpenAI API Key (для Whisper)</label>
+      <div class="key-row">
+        <input type="password" id="openai-key" placeholder="sk-..." />
+        <button class="btn btn-sm" onclick="toggleKey('openai-key')">Показать</button>
+      </div>
+      <div class="note"><span class="note-icon">ℹ️</span> Получить на platform.openai.com → API keys. Транскрипция часового видео ≈ $0.36</div>
+    </div>
+  </div>
+
+  <!-- File Upload -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">2</span> Файл с записью</div>
+
+    <div class="upload-zone" id="drop-zone">
+      <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.ogg,.webm,.oga" />
+      <div class="upload-icon">🎙</div>
+      <div class="upload-label">Перетащите файл или кликните</div>
+      <div class="upload-hint">MP3, MP4, M4A, WAV, OGG, WebM · до 25 МБ (лимит Whisper API)</div>
+    </div>
+
+    <div class="file-info" id="file-info">
+      <span class="file-icon" id="file-type-icon">🎵</span>
+      <span class="file-name" id="file-name-label">—</span>
+      <span class="file-size" id="file-size-label">—</span>
+    </div>
+
+    <div class="note" style="margin-top:12px"><span class="note-icon">💡</span> Если файл больше 25 МБ — сожмите через ffmpeg: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px">ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 -b:a 32k output.mp3</code></div>
+  </div>
+
+  <!-- Context -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">3</span> Контекст (необязательно)</div>
+
+    <div class="field">
+      <label>Ключ для словаря (slug)</label>
+      <input type="text" id="slug-input" placeholder="lesson15 — или оставьте пустым, Claude предложит" />
+    </div>
+
+    <div class="field">
+      <label>Подпись из Telegram (если есть)</label>
+      <textarea id="caption-input" placeholder="Например: Запись вчерашней лекции по возражениям"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Ссылка на запись в Telegram</label>
+      <input type="text" id="link-input" placeholder="https://t.me/c/..." />
+    </div>
+  </div>
+
+  <!-- Run -->
+  <button class="btn btn-primary" id="run-btn" onclick="runAnalysis()" disabled>
+    <span>⚡</span> Анализировать
+  </button>
+
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progress-wrap" style="margin-top:16px">
+    <div class="card">
+      <div class="card-title">Обработка</div>
+      <div class="progress-stages" id="stages">
+        <div class="stage" id="s1"><span class="stage-icon">⏳</span> Отправка в Whisper...</div>
+        <div class="stage" id="s2"><span class="stage-icon">⏳</span> Транскрипция</div>
+        <div class="stage" id="s3"><span class="stage-icon">⏳</span> Анализ через Claude</div>
+        <div class="stage" id="s4"><span class="stage-icon">⏳</span> Формирование карточки</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-wrap" id="result-wrap" style="margin-top:16px">
+    <div class="card">
+      <div class="result-header">
+        <div class="result-title">✅ Карточка готова</div>
+        <div class="result-actions">
+          <button class="copy-btn" onclick="copyJson()">Копировать JSON</button>
+          <button class="copy-btn" onclick="addToDict()">+ В словарь</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('card')">Карточка</div>
+        <div class="tab" onclick="switchTab('transcript')">Транскрипт</div>
+        <div class="tab" onclick="switchTab('json')">JSON</div>
+      </div>
+
+      <div class="tab-panel active" id="tab-card">
+        <div class="result-block">
+          <div class="result-block-label">Ключ → ссылка</div>
+          <div class="slug-row">
+            <span class="slug-key" id="res-slug">—</span>
+            <span class="slug-arrow">→</span>
+            <span class="slug-link" id="res-link">—</span>
+          </div>
+        </div>
+
+        <div class="result-block">
+          <div class="result-block-label">Название лекции</div>
+          <div class="result-content" id="res-title">—</div>
+        </div>
+
+        <div class="result-block">
+          <div class="result-block-label">Краткое описание</div>
+          <div class="result-content" id="res-desc">—</div>
+        </div>
+
+        <div class="result-block">
+          <div class="result-block-label">Теги</div>
+          <div class="tags" id="res-tags"></div>
+        </div>
+
+        <div class="result-block">
+          <div class="result-block-label">Ключевые темы</div>
+          <div class="result-content" id="res-topics">—</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-transcript">
+        <div class="result-block">
+          <div class="result-block-label">Полный транскрипт</div>
+          <div class="result-content" id="res-transcript" style="max-height:400px;overflow-y:auto;font-size:13px;">—</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-json">
+        <div class="result-block">
+          <div class="result-block-label">JSON для словаря</div>
+          <div class="json-out" id="res-json">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dictionary -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-title" style="justify-content:space-between; display:flex; align-items:center">
+      <span style="display:flex;align-items:center;gap:8px"><span class="step-num">📖</span> Словарь</span>
+      <div style="display:flex;gap:8px">
+        <button class="copy-btn" onclick="uploadDictToDB()" style="color:#4ade80">Загрузить в базу</button>
+        <button class="copy-btn" onclick="exportDict()">Экспорт JSON</button>
+        <button class="copy-btn" onclick="clearDict()" style="color:#f87171">Очистить</button>
+      </div>
+    </div>
+
+    <div id="upload-status" style="display:none;padding:10px 0;font-size:13px;color:var(--text-muted)"></div>
+
+    <div id="dict-container">
+      <div class="empty-dict">Словарь пуст — проанализируйте первое видео</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentResult = null;
+  let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
+
+  // File input
+  const fileInput = document.getElementById('file-input');
+  const dropZone = document.getElementById('drop-zone');
+
+  fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleFile(e.dataTransfer.files[0]);
+  });
+
+  function handleFile(file) {
+    if (!file) return;
+    const info = document.getElementById('file-info');
+    document.getElementById('file-name-label').textContent = file.name;
+    document.getElementById('file-size-label').textContent = formatSize(file.size);
+    document.getElementById('file-type-icon').textContent = file.type.startsWith('video') ? '🎬' : '🎵';
+    info.classList.add('visible');
+    checkReady();
+  }
+
+  function formatSize(bytes) {
+    if (bytes > 1024*1024) return (bytes/1024/1024).toFixed(1) + ' МБ';
+    return (bytes/1024).toFixed(0) + ' КБ';
+  }
+
+  function checkReady() {
+    const hasKey = document.getElementById('openai-key').value.trim();
+    const hasFile = fileInput.files[0];
+    document.getElementById('run-btn').disabled = !(hasKey && hasFile);
+  }
+
+  document.getElementById('openai-key').addEventListener('input', checkReady);
+
+  function toggleKey(id) {
+    const el = document.getElementById(id);
+    el.type = el.type === 'password' ? 'text' : 'password';
+  }
+
+  function setStage(id, state, text) {
+    const el = document.getElementById(id);
+    el.className = 'stage ' + state;
+    const icons = { pending: '⏳', active: '<span class="spinner"></span>', done: '✅', error: '❌' };
+    el.innerHTML = `<span class="stage-icon">${icons[state]}</span> ${text}`;
+  }
+
+  async function runAnalysis() {
+    const key = document.getElementById('openai-key').value.trim();
+    const file = fileInput.files[0];
+    if (!key || !file) return;
+
+    showError('');
+    document.getElementById('progress-wrap').classList.add('visible');
+    document.getElementById('result-wrap').classList.remove('visible');
+    document.getElementById('run-btn').disabled = true;
+
+    ['s1','s2','s3','s4'].forEach(s => setStage(s, 'pending', document.getElementById(s).textContent));
+
+    try {
+      // Step 1: Whisper
+      setStage('s1', 'active', 'Отправка файла в Whisper API...');
+      setStage('s2', 'active', 'Транскрибация (зависит от длины записи)...');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'ru');
+      formData.append('response_format', 'text');
+
+      const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}` },
+        body: formData
+      });
+
+      if (!whisperRes.ok) {
+        const err = await whisperRes.json().catch(() => ({}));
+        throw new Error('Whisper: ' + (err.error?.message || whisperRes.statusText));
+      }
+
+      const transcript = await whisperRes.text();
+      setStage('s1', 'done', 'Файл получен');
+      setStage('s2', 'done', `Транскрипт готов (${transcript.length} символов)`);
+
+      // Step 2: Claude
+      setStage('s3', 'active', 'Анализируем содержание через Claude...');
+
+      const slug = document.getElementById('slug-input').value.trim();
+      const caption = document.getElementById('caption-input').value.trim();
+      const link = document.getElementById('link-input').value.trim();
+
+      const prompt = `Ты помощник, который создаёт карточки для словаря учебного контента онлайн-клуба по продажам и маркетингу.
+
+Вот транскрипт записи${caption ? ` (подпись в Telegram: "${caption}")` : ''}:
+
+---
+${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст обрезан для анализа]' : ''}
+---
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки:
+{
+  "slug": "${slug || 'предложи slug в формате lesson_XX или topic_слово'}",
+  "title": "Точное и информативное название лекции/занятия (до 80 символов)",
+  "description": "Краткое описание для участника клуба — что он узнает (2-3 предложения)",
+  "topics": ["тема 1", "тема 2", "тема 3"],
+  "tags": ["тег1", "тег2", "тег3", "тег4", "тег5"],
+  "type": "lecture|training|qa|other",
+  "duration_hint": "примерная длина: короткая/средняя/длинная"
+}`;
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!claudeRes.ok) {
+        const err = await claudeRes.json().catch(() => ({}));
+        throw new Error('Claude API: ' + (err.error?.message || claudeRes.statusText));
+      }
+
+      const claudeData = await claudeRes.json();
+      setStage('s3', 'done', 'Анализ завершён');
+      setStage('s4', 'active', 'Формируем карточку...');
+
+      const raw = claudeData.content.map(b => b.text || '').join('');
+      const clean = raw.replace(/```json|```/g, '').trim();
+      const card = JSON.parse(clean);
+
+      card.link = link || '(ссылка не указана)';
+      card.file = file.name;
+      card.created = new Date().toISOString().slice(0, 10);
+      card._transcript = transcript;
+
+      currentResult = card;
+
+      setStage('s4', 'done', 'Карточка сформирована');
+
+      showResult(card, transcript);
+
+    } catch (err) {
+      showError(err.message);
+      ['s1','s2','s3','s4'].forEach(s => {
+        if (document.getElementById(s).classList.contains('active'))
+          setStage(s, 'error', 'Ошибка');
+      });
+    } finally {
+      document.getElementById('run-btn').disabled = false;
+      checkReady();
+    }
+  }
+
+  function showResult(card, transcript) {
+    document.getElementById('result-wrap').classList.add('visible');
+
+    document.getElementById('res-slug').textContent = card.slug;
+    document.getElementById('res-link').textContent = card.link;
+    document.getElementById('res-title').textContent = card.title;
+    document.getElementById('res-desc').textContent = card.description;
+    document.getElementById('res-transcript').textContent = transcript;
+    document.getElementById('res-topics').textContent = (card.topics || []).map((t,i) => `${i+1}. ${t}`).join('\n');
+
+    const tagsEl = document.getElementById('res-tags');
+    tagsEl.innerHTML = '';
+    (card.tags || []).forEach(t => {
+      const span = document.createElement('span');
+      span.className = 'tag';
+      span.textContent = '#' + t;
+      tagsEl.appendChild(span);
+    });
+
+    const jsonOut = { ...card };
+    delete jsonOut._transcript;
+    document.getElementById('res-json').textContent = JSON.stringify(jsonOut, null, 2);
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-box');
+    el.textContent = msg;
+    el.classList.toggle('visible', !!msg);
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const names = ['card', 'transcript', 'json'];
+      t.classList.toggle('active', names[i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach((p, i) => {
+      const names = ['tab-card', 'tab-transcript', 'tab-json'];
+      p.classList.toggle('active', names[i] === 'tab-' + name);
+    });
+  }
+
+  function copyJson() {
+    if (!currentResult) return;
+    const out = { ...currentResult };
+    delete out._transcript;
+    navigator.clipboard.writeText(JSON.stringify(out, null, 2));
+  }
+
+  function addToDict() {
+    if (!currentResult) return;
+    const entry = { ...currentResult };
+    entry.transcript = entry._transcript || '';
+    delete entry._transcript;
+
+    const exists = dictionary.findIndex(d => d.slug === entry.slug);
+    if (exists >= 0) dictionary[exists] = entry;
+    else dictionary.push(entry);
+
+    localStorage.setItem('club_dict', JSON.stringify(dictionary));
+    renderDict();
+  }
+
+  function renderDict() {
+    const el = document.getElementById('dict-container');
+    if (!dictionary.length) {
+      el.innerHTML = '<div class="empty-dict">Словарь пуст — проанализируйте первое видео</div>';
+      return;
+    }
+
+    el.innerHTML = `<table class="dict-table">
+      <thead><tr><th>Ключ</th><th>Название</th><th>Ссылка</th><th>Дата</th></tr></thead>
+      <tbody>${dictionary.map((d, i) => `
+        <tr>
+          <td class="key-cell">${d.slug}</td>
+          <td class="title-cell">${d.title}<br><span style="font-size:11px;color:var(--text-muted)">${(d.tags||[]).map(t=>'#'+t).join(' ')}</span></td>
+          <td class="link-cell"><a href="${d.link}" target="_blank" style="color:var(--accent);text-decoration:none">${d.link !== '(ссылка не указана)' ? 'Открыть →' : '—'}</a></td>
+          <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${d.created || '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  const API_URL = 'https://club-backend-production-fc7f.up.railway.app';
+  const ADMIN_TOKEN = 'club2024secretkey';
+
+  async function lectureExists(slug) {
+    try {
+      const r = await fetch(`${API_URL}/lectures/${slug}`);
+      return r.status === 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function uploadDictToDB() {
+    if (!dictionary.length) { alert('Словарь пуст — нечего загружать'); return; }
+    if (!confirm(`Загрузить ${dictionary.length} записей в базу?`)) return;
+
+    const statusEl = document.getElementById('upload-status');
+    statusEl.style.display = 'block';
+
+    let created = 0, updated = 0, errors = 0;
+
+    for (const entry of dictionary) {
+      const payload = {
+        slug: entry.slug,
+        title: entry.title || '',
+        description: entry.description || '',
+        link: entry.link || '',
+        link_vk: entry.link_vk || '',
+        type: entry.type || 'lecture',
+        tags: entry.tags || [],
+        topics: entry.topics || [],
+        timecodes: entry.timecodes || [],
+        duration_minutes: entry.duration_minutes || null,
+        transcript: entry.transcript || '',
+      };
+
+      statusEl.textContent = `Загружаю ${entry.slug}...`;
+
+      try {
+        const exists = await lectureExists(entry.slug);
+        const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
+        const method = exists ? 'PUT' : 'POST';
+        const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (r.ok) { exists ? updated++ : created++; }
+        else { errors++; console.error(entry.slug, r.status, await r.text()); }
+      } catch (e) {
+        errors++;
+        console.error(entry.slug, e);
+      }
+    }
+
+    statusEl.textContent = `Готово: создано ${created}, обновлено ${updated}, ошибок ${errors}`;
+  }
+
+  function exportDict() {
+    const blob = new Blob([JSON.stringify(dictionary, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'club_dictionary.json'; a.click();
+  }
+
+  function clearDict() {
+    if (!confirm('Очистить весь словарь?')) return;
+    dictionary = [];
+    localStorage.removeItem('club_dict');
+    renderDict();
+  }
+
+  renderDict();
+</script>
+</body>
+</html>
