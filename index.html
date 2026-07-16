@@ -4,45 +4,33 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>БП · Анализатор контента</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="БП Анализатор">
+<meta name="theme-color" content="#7c6cf0">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;900&family=Manrope:wght@400;500;600;700&display=swap');
 
-/* ── Темы (те же токены, что и в админке) ── */
 [data-theme="light"] {
-  --bg:        #f1ecfb;
-  --bg-b:      #e9effc;
-  --bg-c:      #fbeef6;
-  --surface:   rgba(255,255,255,0.65);
-  --surface2:  rgba(255,255,255,0.85);
-  --border:    rgba(255,255,255,0.6);
-  --line:      rgba(120,110,160,0.13);
-  --text:      #2c2a3d;
-  --text-dim:  #6b6680;
-  --text-faint:#a7a2bd;
-  --card-bg:   rgba(255,255,255,0.55);
-  --input-bg:  rgba(255,255,255,0.5);
-  --stat-bg:   rgba(255,255,255,0.6);
-  --blob1-op:  0.22;
-  --blob2-op:  0.18;
+  --bg:#f1ecfb; --bg-b:#e9effc; --bg-c:#fbeef6;
+  --surface:rgba(255,255,255,0.65); --surface2:rgba(255,255,255,0.85);
+  --border:rgba(255,255,255,0.6); --line:rgba(120,110,160,0.13);
+  --text:#2c2a3d; --text-dim:#6b6680; --text-faint:#a7a2bd;
+  --card-bg:rgba(255,255,255,0.55); --input-bg:rgba(255,255,255,0.5); --stat-bg:rgba(255,255,255,0.6);
+  --blob1-op:0.22; --blob2-op:0.18;
 }
 [data-theme="dark"] {
-  --bg:        #1e1c28;
-  --bg-b:      #221f30;
-  --bg-c:      #261e2e;
-  --surface:   rgba(255,255,255,0.06);
-  --surface2:  rgba(255,255,255,0.09);
-  --border:    rgba(255,255,255,0.10);
-  --line:      rgba(255,255,255,0.08);
-  --text:      #ede9f8;
-  --text-dim:  #9d99b8;
-  --text-faint:#5e5a78;
-  --card-bg:   rgba(255,255,255,0.05);
-  --input-bg:  rgba(255,255,255,0.07);
-  --stat-bg:   rgba(255,255,255,0.07);
-  --blob1-op:  0.15;
-  --blob2-op:  0.10;
+  --bg:#1e1c28; --bg-b:#221f30; --bg-c:#261e2e;
+  --surface:rgba(255,255,255,0.06); --surface2:rgba(255,255,255,0.09);
+  --border:rgba(255,255,255,0.10); --line:rgba(255,255,255,0.08);
+  --text:#ede9f8; --text-dim:#9d99b8; --text-faint:#5e5a78;
+  --card-bg:rgba(255,255,255,0.05); --input-bg:rgba(255,255,255,0.07); --stat-bg:rgba(255,255,255,0.07);
+  --blob1-op:0.15; --blob2-op:0.10;
 }
-
 :root {
   --lav:#9b8cf2; --lav-deep:#7c6cf0; --lav-dim:rgba(155,140,242,0.16);
   --peach:#ffb199; --mint:#8fe3c0; --coral:#ff8fa3;
@@ -50,7 +38,6 @@
   --disp:'Unbounded',sans-serif; --body:'Manrope',sans-serif;
   --shadow:0 4px 20px -6px rgba(124,108,240,0.15);
 }
-
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg);transition:background .3s}
 body{
@@ -67,9 +54,9 @@ body{
 .blob-1{width:300px;height:300px;top:-100px;right:-80px;background:var(--lav);opacity:var(--blob1-op)}
 .blob-2{width:250px;height:250px;bottom:15%;left:-100px;background:var(--peach);opacity:var(--blob2-op)}
 .blob-3{width:200px;height:200px;top:40%;right:-60px;background:var(--mint);opacity:var(--blob2-op)}
-.shell{position:relative;z-index:1;max-width:640px;margin:0 auto;padding:0 16px}
+.shell{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 16px}
 
-header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-items:center;justify-content:space-between}
+header{padding:calc(env(safe-area-inset-top)+16px) 0 20px;display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;align-items:center;gap:10px}
 .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--lav),var(--coral));display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:900;font-size:13px;color:white;box-shadow:0 6px 16px -4px rgba(155,140,242,0.45)}
 .brand-name{font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:-.01em}
@@ -77,10 +64,7 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
 .icon-btn{width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer;font-size:15px;transition:transform .15s;color:var(--text)}
 .icon-btn:active{transform:scale(0.92)}
 
-.page-title{font-family:var(--disp);font-weight:700;font-size:20px;margin:8px 0 6px;letter-spacing:-.01em}
-.page-sub{font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:20px}
-
-.pipeline{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+.pipeline{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 24px}
 .pipe-step{font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint)}
 .pipe-step.active{background:var(--lav-dim);color:var(--lav-deep);border-color:transparent}
 .pipe-arrow{color:var(--text-faint);font-size:11px;align-self:center}
@@ -103,6 +87,7 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
 .btn:active{transform:scale(0.96)}
 .btn-sm{padding:8px 12px}
 .note{font-size:12px;color:var(--text-faint);line-height:1.5;margin-top:8px}
+code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px}
 
 .upload-zone{border:2px dashed var(--line);border-radius:16px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .15s;position:relative}
 .upload-zone.drag-over{border-color:var(--lav-deep);background:var(--lav-dim)}
@@ -135,11 +120,12 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
 .result-wrap.visible{display:block}
 .result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
 .result-title{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--green)}
-.result-actions{display:flex;gap:8px}
+.result-actions{display:flex;gap:8px;flex-wrap:wrap}
 .copy-btn{font-size:11px;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
 .copy-btn:active{transform:scale(0.96)}
+.export-btn{font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;background:var(--lav-dim);border:1px solid transparent;color:var(--lav-deep);cursor:pointer}
 
-.tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .tab{font-size:12px;font-weight:600;padding:8px 14px;cursor:pointer;color:var(--text-faint);border-bottom:2px solid transparent}
 .tab.active{color:var(--lav-deep);border-color:var(--lav-deep)}
 .tab-panel{display:none}
@@ -147,15 +133,20 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
 
 .result-block{margin-bottom:14px}
 .result-block:last-child{margin-bottom:0}
-.result-block-label{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.result-block-label{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .result-content{font-size:13px;line-height:1.6;white-space:pre-wrap}
-.slug-row{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.slug-row{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap;margin-bottom:6px}
 .slug-key{font-weight:700;background:var(--lav-dim);color:var(--lav-deep);padding:4px 10px;border-radius:8px}
-.slug-arrow{color:var(--text-faint)}
-.slug-link{color:var(--text-dim);word-break:break-all}
+.slug-tag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);flex-shrink:0}
+.slug-link{color:var(--text-dim);word-break:break-all;font-size:12px}
 .tags{display:flex;flex-wrap:wrap;gap:6px}
 .tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim)}
 .json-out{font-size:12px;background:var(--surface);border-radius:12px;padding:14px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow-y:auto}
+
+.tc-list{display:flex;flex-direction:column;gap:6px}
+.tc-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface)}
+.tc-time{font-weight:700;font-size:11px;color:var(--lav-deep);background:var(--lav-dim);padding:3px 8px;border-radius:6px;flex-shrink:0;white-space:nowrap}
+.tc-text{font-size:13px;line-height:1.5}
 
 .empty-dict{text-align:center;padding:24px;font-size:13px;color:var(--text-faint)}
 .dict-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -229,39 +220,39 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
     <span class="pipe-arrow">→</span>
     <span class="pipe-step">Whisper</span>
     <span class="pipe-arrow">→</span>
-    <span class="pipe-step">Claude</span>
+    <span class="pipe-step">GPT-4o-mini</span>
+    <span class="pipe-arrow">→</span>
+    <span class="pipe-step">Таймкоды</span>
     <span class="pipe-arrow">→</span>
     <span class="pipe-step">Словарь</span>
-    <span class="pipe-arrow">→</span>
-    <span class="pipe-step">Бот</span>
   </div>
 
-  <!-- API Keys -->
+  <!-- API Key -->
   <div class="card">
-    <div class="card-title"><span class="step-num">1</span> API ключ</div>
+    <div class="card-title"><span class="step-num">1</span> OpenAI API Key</div>
     <div class="field">
-      <label>OpenAI API Key (для Whisper)</label>
+      <label>API Key (Whisper + GPT-4o-mini)</label>
       <div class="key-row">
-        <input type="password" id="openai-key" />
+        <input type="password" id="openai-key" placeholder="sk-..." />
         <button class="btn btn-sm" onclick="toggleKey('openai-key')">Показать</button>
       </div>
-      <div class="note">Получить на platform.openai.com → API keys. Транскрипция часового видео ≈ $0.36</div>
+      <div class="note">platform.openai.com → API keys. Один час записи ≈ $0.40 суммарно.</div>
     </div>
   </div>
 
-  <!-- File Upload -->
+  <!-- File -->
   <div class="card">
     <div class="card-title"><span class="step-num">2</span> Файл с записью</div>
     <div class="upload-zone" id="drop-zone">
-      <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.ogg,.webm,.oga" />
+      <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.ogg,.webm" />
       <div class="upload-label">Перетащите файл или кликните</div>
-      <div class="upload-hint">MP3, MP4, M4A, WAV, OGG, WebM · до 25 МБ (лимит Whisper API)</div>
+      <div class="upload-hint">MP3, MP4, M4A, WAV, OGG, WebM · до 25 МБ</div>
     </div>
     <div class="file-info" id="file-info">
       <span class="file-name" id="file-name-label">—</span>
       <span class="file-size" id="file-size-label">—</span>
     </div>
-    <div class="note" style="margin-top:12px">Если файл больше 25 МБ — сожмите через ffmpeg: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px">ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 -b:a 32k output.mp3</code></div>
+    <div class="note" style="margin-top:12px">Больше 25 МБ? Сожмите: <code class="inline">ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 -b:a 32k out.mp3</code></div>
   </div>
 
   <!-- Context -->
@@ -281,11 +272,10 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
     </div>
     <div class="field">
       <label>Ссылка на запись в ВК</label>
-      <input type="text" id="link-vk-input" placeholder="https://vk.com/video-..." />
+      <input type="text" id="link-vk-input" placeholder="https://vk.com/video..." />
     </div>
   </div>
 
-  <!-- Run -->
   <button class="btn-primary" id="run-btn" onclick="runAnalysis()" disabled>Анализировать</button>
 
   <div class="error-box" id="error-box"></div>
@@ -294,12 +284,10 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
   <div class="progress-wrap" id="progress-wrap" style="margin-top:16px">
     <div class="card">
       <div class="card-title">Обработка</div>
-      <div id="stages">
-        <div class="stage" id="s1"><span class="stage-icon">·</span> Отправка в Whisper...</div>
-        <div class="stage" id="s2"><span class="stage-icon">·</span> Транскрипция</div>
-        <div class="stage" id="s3"><span class="stage-icon">·</span> Анализ через Claude</div>
-        <div class="stage" id="s4"><span class="stage-icon">·</span> Формирование карточки</div>
-      </div>
+      <div id="s1" class="stage"><span class="stage-icon">·</span> Отправка в Whisper...</div>
+      <div id="s2" class="stage"><span class="stage-icon">·</span> Транскрипция</div>
+      <div id="s3" class="stage"><span class="stage-icon">·</span> Анализ и таймкоды (GPT-4o-mini)</div>
+      <div id="s4" class="stage"><span class="stage-icon">·</span> Формирование карточки</div>
     </div>
   </div>
 
@@ -316,18 +304,17 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
 
       <div class="tabs">
         <div class="tab active" onclick="switchTab('card')">Карточка</div>
+        <div class="tab" onclick="switchTab('timecodes')">Таймкоды</div>
         <div class="tab" onclick="switchTab('transcript')">Транскрипт</div>
         <div class="tab" onclick="switchTab('json')">JSON</div>
       </div>
 
       <div class="tab-panel active" id="tab-card">
         <div class="result-block">
-          <div class="result-block-label">Ключ → ссылка</div>
-          <div class="slug-row">
-            <span class="slug-key" id="res-slug">—</span>
-            <span class="slug-arrow">→</span>
-            <span class="slug-link" id="res-link">—</span>
-          </div>
+          <div class="result-block-label">Ключ и ссылки</div>
+          <div class="slug-row"><span class="slug-key" id="res-slug">—</span></div>
+          <div class="slug-row"><span class="slug-tag">Telegram</span><span class="slug-link" id="res-link">—</span></div>
+          <div class="slug-row"><span class="slug-tag">ВК</span><span class="slug-link" id="res-link-vk">—</span></div>
         </div>
         <div class="result-block">
           <div class="result-block-label">Название лекции</div>
@@ -347,17 +334,49 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
         </div>
       </div>
 
+      <div class="tab-panel" id="tab-timecodes">
+        <div class="result-block">
+          <div class="result-block-label">
+            <span>Таймкоды</span>
+            <span style="display:flex;gap:6px">
+              <button class="export-btn" onclick="copyTimecodes()">Копировать</button>
+              <button class="export-btn" onclick="exportTimecodesTxt()">Скачать .txt</button>
+            </span>
+          </div>
+          <div class="tc-list" id="res-timecodes">
+            <div style="color:var(--text-faint);font-size:13px">Таймкоды появятся после анализа</div>
+          </div>
+        </div>
+      </div>
+
       <div class="tab-panel" id="tab-transcript">
         <div class="result-block">
-          <div class="result-block-label">Полный транскрипт</div>
-          <div class="result-content" id="res-transcript" style="max-height:400px;overflow-y:auto;font-size:13px;">—</div>
+          <div class="result-block-label">
+            <span>Полный транскрипт</span>
+            <span style="display:flex;gap:6px">
+              <button class="export-btn" onclick="copyTranscript()">Копировать</button>
+              <button class="export-btn" onclick="exportTranscriptTxt()">.txt</button>
+              <button class="export-btn" onclick="exportTranscriptMd()">.md</button>
+            </span>
+          </div>
+          <div class="result-content" id="res-transcript" style="max-height:400px;overflow-y:auto;font-size:13px">—</div>
         </div>
       </div>
 
       <div class="tab-panel" id="tab-json">
         <div class="result-block">
-          <div class="result-block-label">JSON для словаря</div>
+          <div class="result-block-label">
+            <span>JSON для словаря (без транскрипта)</span>
+            <button class="export-btn" onclick="exportJsonClean()">.json</button>
+          </div>
           <div class="json-out" id="res-json">—</div>
+        </div>
+        <div class="result-block">
+          <div class="result-block-label">
+            <span>JSON + транскрипт</span>
+            <button class="export-btn" onclick="exportJsonWithTranscript()">.json</button>
+          </div>
+          <div class="note">Та же карточка, плюс поле <code class="inline">transcript</code> — для архива/резервной копии.</div>
         </div>
       </div>
     </div>
@@ -399,44 +418,40 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
   })();
 
   let currentResult = null;
+  let currentTranscript = '';
+  let currentTimecodes = [];
   let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
 
-  // File input
+  // ── File handling ──
   const fileInput = document.getElementById('file-input');
-  const dropZone = document.getElementById('drop-zone');
+  const dropZone  = document.getElementById('drop-zone');
 
   fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
-
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
+    e.preventDefault(); dropZone.classList.remove('drag-over');
     handleFile(e.dataTransfer.files[0]);
   });
 
   function handleFile(file) {
     if (!file) return;
-    const info = document.getElementById('file-info');
     document.getElementById('file-name-label').textContent = file.name;
     document.getElementById('file-size-label').textContent = formatSize(file.size);
-    info.classList.add('visible');
+    document.getElementById('file-info').classList.add('visible');
     checkReady();
   }
 
-  function formatSize(bytes) {
-    if (bytes > 1024*1024) return (bytes/1024/1024).toFixed(1) + ' МБ';
-    return (bytes/1024).toFixed(0) + ' КБ';
+  function formatSize(b) {
+    return b > 1048576 ? (b/1048576).toFixed(1)+' МБ' : (b/1024).toFixed(0)+' КБ';
   }
 
   function checkReady() {
-    const hasKey = document.getElementById('openai-key').value.trim();
-    const hasFile = fileInput.files[0];
-    document.getElementById('run-btn').disabled = !(hasKey && hasFile);
+    const ok = document.getElementById('openai-key').value.trim() && fileInput.files[0];
+    document.getElementById('run-btn').disabled = !ok;
   }
 
   document.getElementById('openai-key').addEventListener('input', checkReady);
-  checkReady();
 
   function toggleKey(id) {
     const el = document.getElementById(id);
@@ -446,12 +461,13 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
   function setStage(id, state, text) {
     const el = document.getElementById(id);
     el.className = 'stage ' + state;
-    const icons = { pending: '·', active: '<span class="spinner"></span>', done: '✓', error: '✕' };
+    const icons = { pending:'·', active:'<span class="spinner"></span>', done:'✓', error:'✕' };
     el.innerHTML = `<span class="stage-icon">${icons[state]}</span> ${text}`;
   }
 
+  // ── Main analysis ──
   async function runAnalysis() {
-    const key = document.getElementById('openai-key').value.trim();
+    const key  = document.getElementById('openai-key').value.trim();
     const file = fileInput.files[0];
     if (!key || !file) return;
 
@@ -459,102 +475,112 @@ header{padding:calc(env(safe-area-inset-top)+16px) 0 16px;display:flex;align-ite
     document.getElementById('progress-wrap').classList.add('visible');
     document.getElementById('result-wrap').classList.remove('visible');
     document.getElementById('run-btn').disabled = true;
-
-    ['s1','s2','s3','s4'].forEach(s => setStage(s, 'pending', document.getElementById(s).textContent));
+    ['s1','s2','s3','s4'].forEach(s => setStage(s,'pending',document.getElementById(s).textContent));
 
     try {
-      // Step 1: Whisper
-      setStage('s1', 'active', 'Отправка файла в Whisper API...');
-      setStage('s2', 'active', 'Транскрибация (зависит от длины записи)...');
+      setStage('s1','active','Отправка файла в Whisper API...');
+      setStage('s2','active','Транскрипция (зависит от длины)...');
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'ru');
-      formData.append('response_format', 'text');
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('model','whisper-1');
+      fd.append('language','ru');
+      fd.append('response_format','verbose_json');
+      fd.append('timestamp_granularities[]','segment');
 
-      const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}` },
-        body: formData
+      const wRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${key}`},
+        body:fd
       });
 
-      if (!whisperRes.ok) {
-        const err = await whisperRes.json().catch(() => ({}));
-        throw new Error('Whisper: ' + (err.error?.message || whisperRes.statusText));
+      if (!wRes.ok) {
+        const e = await wRes.json().catch(()=>({}));
+        throw new Error('Whisper: ' + (e.error?.message || wRes.statusText));
       }
 
-      const transcript = await whisperRes.text();
-      setStage('s1', 'done', 'Файл получен');
-      setStage('s2', 'done', `Транскрипт готов (${transcript.length} символов)`);
+      const wData = await wRes.json();
+      const transcript = wData.text || '';
+      const segments   = wData.segments || [];
 
-      // Step 2: Claude
-      setStage('s3', 'active', 'Анализируем содержание через Claude...');
+      currentTranscript = transcript;
+      setStage('s1','done','Файл получен');
+      setStage('s2','done',`Транскрипт готов (${transcript.length} символов, ${segments.length} сегментов)`);
 
-      const slug = document.getElementById('slug-input').value.trim();
+      setStage('s3','active','Анализируем через GPT-4o-mini...');
+
+      const slug    = document.getElementById('slug-input').value.trim();
       const caption = document.getElementById('caption-input').value.trim();
-      const link = document.getElementById('link-input').value.trim();
-      const linkVk = document.getElementById('link-vk-input').value.trim();
+      const link    = document.getElementById('link-input').value.trim();
+      const linkVk  = document.getElementById('link-vk-input').value.trim();
 
-      const prompt = `Ты помощник, который создаёт карточки для словаря учебного контента онлайн-клуба по продажам и маркетингу.
+      const segSummary = segments
+        .map(s => `[${fmtTime(s.start)}] ${s.text.trim().slice(0, 60)}`)
+        .join('\n');
 
-Вот транскрипт записи${caption ? ` (подпись в Telegram: "${caption}")` : ''}:
+      const prompt = `Ты помощник, который анализирует лекции онлайн-клуба по продажам и маркетингу.
 
+Транскрипт с временными метками${caption ? ` (подпись: "${caption}")` : ''}:
 ---
-${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст обрезан для анализа]' : ''}
+${segSummary}
 ---
 
 Верни ТОЛЬКО валидный JSON без markdown-обёртки:
 {
-  "slug": "${slug || 'предложи slug в формате sales_p03_l01_lecture'}",
-  "title": "Точное и информативное название лекции/занятия (до 80 символов)",
-  "description": "Краткое описание для участника клуба — что он узнает (2-3 предложения)",
-  "topics": ["тема 1", "тема 2", "тема 3"],
-  "tags": ["тег1", "тег2", "тег3", "тег4", "тег5"],
+  "slug": "${slug || 'предложи slug: sales_p03_l01_lecture'}",
+  "title": "Точное название лекции до 80 символов",
+  "description": "Что узнает участник — 2-3 предложения",
+  "topics": ["тема 1","тема 2","тема 3"],
+  "tags": ["тег1","тег2","тег3","тег4","тег5"],
   "type": "lecture|training|qa|other",
-  "duration_hint": "примерная длина: короткая/средняя/длинная"
-}`;
+  "timecodes": [
+    {"time": "0:00", "label": "Вступление и тема"},
+    {"time": "X:XX", "label": "Название раздела"}
+  ]
+}
 
-      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+Таймкоды: выдели 8-15 смысловых разделов, охватывающих всё видео от начала до конца. Время бери из меток [MM:SS] или [H:MM:SS] в тексте. Последний таймкод должен быть близко к концу видео. Формат времени: M:SS или H:MM:SS.`;
+
+      const gRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }]
+          model:'gpt-4o-mini',
+          max_tokens:1200,
+          messages:[{role:'user',content:prompt}]
         })
       });
 
-      if (!claudeRes.ok) {
-        const err = await claudeRes.json().catch(() => ({}));
-        throw new Error('Claude API: ' + (err.error?.message || claudeRes.statusText));
+      if (!gRes.ok) {
+        const e = await gRes.json().catch(()=>({}));
+        throw new Error('GPT: ' + (e.error?.message || gRes.statusText));
       }
 
-      const claudeData = await claudeRes.json();
-      setStage('s3', 'done', 'Анализ завершён');
-      setStage('s4', 'active', 'Формируем карточку...');
+      const gData = await gRes.json();
+      setStage('s3','done','Анализ завершён');
+      setStage('s4','active','Формируем карточку...');
 
-      const raw = claudeData.content.map(b => b.text || '').join('');
-      const clean = raw.replace(/```json|```/g, '').trim();
-      const card = JSON.parse(clean);
+      const raw   = gData.choices[0].message.content;
+      const clean = raw.replace(/```json|```/g,'').trim();
+      const card  = JSON.parse(clean);
 
-      card.link = link || '(ссылка не указана)';
+      card.link    = link || '(ссылка не указана)';
       card.link_vk = linkVk || '';
-      card.file = file.name;
-      card.created = new Date().toISOString().slice(0, 10);
+      card.file    = file.name;
+      card.created = new Date().toISOString().slice(0,10);
       card._transcript = transcript;
 
-      currentResult = card;
+      currentResult    = card;
+      currentTimecodes = card.timecodes || [];
 
-      setStage('s4', 'done', 'Карточка сформирована');
+      setStage('s4','done','Карточка сформирована');
+      showResult(card, transcript, currentTimecodes);
 
-      showResult(card, transcript);
-
-    } catch (err) {
+    } catch(err) {
       showError(err.message);
       ['s1','s2','s3','s4'].forEach(s => {
         if (document.getElementById(s).classList.contains('active'))
-          setStage(s, 'error', 'Ошибка');
+          setStage(s,'error','Ошибка');
       });
     } finally {
       document.getElementById('run-btn').disabled = false;
@@ -562,64 +588,117 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
     }
   }
 
-  function showResult(card, transcript) {
+  function fmtTime(sec) {
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = Math.floor(sec%60);
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+
+  function showResult(card, transcript, timecodes) {
     document.getElementById('result-wrap').classList.add('visible');
 
-    document.getElementById('res-slug').textContent = card.slug;
-    document.getElementById('res-link').textContent = card.link;
+    document.getElementById('res-slug').textContent  = card.slug;
+    document.getElementById('res-link').textContent  = card.link;
+    document.getElementById('res-link-vk').textContent = card.link_vk || '—';
     document.getElementById('res-title').textContent = card.title;
-    document.getElementById('res-desc').textContent = card.description;
+    document.getElementById('res-desc').textContent  = card.description;
     document.getElementById('res-transcript').textContent = transcript;
-    document.getElementById('res-topics').textContent = (card.topics || []).map((t,i) => `${i+1}. ${t}`).join('\n');
+    document.getElementById('res-topics').textContent = (card.topics||[]).map((t,i)=>`${i+1}. ${t}`).join('\n');
 
     const tagsEl = document.getElementById('res-tags');
     tagsEl.innerHTML = '';
-    (card.tags || []).forEach(t => {
-      const span = document.createElement('span');
-      span.className = 'tag';
-      span.textContent = '#' + t;
-      tagsEl.appendChild(span);
+    (card.tags||[]).forEach(t => {
+      const s = document.createElement('span');
+      s.className='tag'; s.textContent='#'+t;
+      tagsEl.appendChild(s);
     });
 
-    const jsonOut = { ...card };
+    const tcEl = document.getElementById('res-timecodes');
+    if (timecodes && timecodes.length) {
+      tcEl.innerHTML = timecodes.map(tc => `
+        <div class="tc-item">
+          <span class="tc-time">${tc.time}</span>
+          <span class="tc-text">${tc.label}</span>
+        </div>`).join('');
+    } else {
+      tcEl.innerHTML = '<div style="color:var(--text-faint);font-size:13px">Таймкоды не сгенерированы</div>';
+    }
+
+    const jsonOut = {...card};
     delete jsonOut._transcript;
     document.getElementById('res-json').textContent = JSON.stringify(jsonOut, null, 2);
   }
 
-  function showError(msg) {
-    const el = document.getElementById('error-box');
-    el.textContent = msg;
-    el.classList.toggle('visible', !!msg);
+  function switchTab(name) {
+    const names = ['card','timecodes','transcript','json'];
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+    document.querySelectorAll('.tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
   }
 
-  function switchTab(name) {
-    document.querySelectorAll('.tab').forEach((t, i) => {
-      const names = ['card', 'transcript', 'json'];
-      t.classList.toggle('active', names[i] === name);
-    });
-    document.querySelectorAll('.tab-panel').forEach((p, i) => {
-      const names = ['tab-card', 'tab-transcript', 'tab-json'];
-      p.classList.toggle('active', names[i] === 'tab-' + name);
-    });
+  function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
+
+  function exportTranscriptTxt() {
+    if (!currentResult) return;
+    download(currentTranscript, `${currentResult.slug || 'transcript'}_transcript.txt`, 'text/plain');
+  }
+
+  function exportTranscriptMd() {
+    if (!currentResult) return;
+    const name  = currentResult.slug || 'transcript';
+    const title = currentResult.title || name;
+    const tc    = (currentResult.timecodes||[]).map(t=>`- **${t.time}** ${t.label}`).join('\n');
+    const md = `# ${title}\n\n> ${currentResult.description||''}\n\n## Таймкоды\n\n${tc}\n\n---\n\n## Транскрипт\n\n${currentTranscript}`;
+    download(md, `${name}_transcript.md`, 'text/markdown');
+  }
+
+  function copyTimecodes() {
+    const text = (currentTimecodes||[]).map(t=>`${t.time} ${t.label}`).join('\n');
+    navigator.clipboard.writeText(text);
+  }
+
+  function exportTimecodesTxt() {
+    if (!currentResult) return;
+    const title = currentResult.title || '';
+    const text = (title ? title+'\n\n' : '') + (currentTimecodes||[]).map(t=>`${t.time} ${t.label}`).join('\n');
+    download(text, `${currentResult.slug || 'timecodes'}_timecodes.txt`, 'text/plain');
+  }
+
+  function download(content, filename, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content],{type:mime}));
+    a.download = filename;
+    a.click();
   }
 
   function copyJson() {
     if (!currentResult) return;
-    const out = { ...currentResult };
+    const out = {...currentResult}; delete out._transcript;
+    navigator.clipboard.writeText(JSON.stringify(out,null,2));
+  }
+
+  function exportJsonClean() {
+    if (!currentResult) return;
+    const out = {...currentResult}; delete out._transcript;
+    download(JSON.stringify(out,null,2), `${currentResult.slug || 'lecture'}.json`, 'application/json');
+  }
+
+  function exportJsonWithTranscript() {
+    if (!currentResult) return;
+    const out = {...currentResult};
     delete out._transcript;
-    navigator.clipboard.writeText(JSON.stringify(out, null, 2));
+    out.transcript = currentTranscript;
+    download(JSON.stringify(out,null,2), `${currentResult.slug || 'lecture'}_full.json`, 'application/json');
   }
 
   function addToDict() {
     if (!currentResult) return;
-    const entry = { ...currentResult };
+    const entry = {...currentResult};
     entry.transcript = entry._transcript || '';
     delete entry._transcript;
-
-    const exists = dictionary.findIndex(d => d.slug === entry.slug);
-    if (exists >= 0) dictionary[exists] = entry;
-    else dictionary.push(entry);
-
+    const idx = dictionary.findIndex(d=>d.slug===entry.slug);
+    if (idx>=0) dictionary[idx]=entry; else dictionary.push(entry);
     localStorage.setItem('club_dict', JSON.stringify(dictionary));
     renderDict();
   }
@@ -627,21 +706,19 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
   function renderDict() {
     const el = document.getElementById('dict-container');
     if (!dictionary.length) {
-      el.innerHTML = '<div class="empty-dict">Словарь пуст — проанализируйте первое видео</div>';
+      el.innerHTML='<div class="empty-dict">Словарь пуст — проанализируйте первое видео</div>';
       return;
     }
-
-    el.innerHTML = `<table class="dict-table">
+    el.innerHTML=`<table class="dict-table">
       <thead><tr><th>Ключ</th><th>Название</th><th>Ссылка</th><th>Дата</th></tr></thead>
-      <tbody>${dictionary.map((d, i) => `
+      <tbody>${dictionary.map(d=>`
         <tr>
           <td class="key-cell">${d.slug}</td>
           <td class="title-cell">${d.title}<br><span style="font-size:11px;color:var(--text-faint)">${(d.tags||[]).map(t=>'#'+t).join(' ')}</span></td>
-          <td class="link-cell"><a href="${d.link}" target="_blank" style="color:var(--lav-deep);text-decoration:none">${d.link !== '(ссылка не указана)' ? 'Открыть →' : '—'}</a></td>
-          <td style="color:var(--text-faint);font-size:12px;white-space:nowrap">${d.created || '—'}</td>
+          <td><a href="${d.link}" target="_blank" style="color:var(--lav-deep);text-decoration:none;font-size:12px">${d.link!=='(ссылка не указана)'?'Открыть →':'—'}</a></td>
+          <td style="color:var(--text-faint);font-size:12px;white-space:nowrap">${d.created||'—'}</td>
         </tr>`).join('')}
-      </tbody>
-    </table>`;
+      </tbody></table>`;
   }
 
   const API_URL = 'https://club-backend-production-fc7f.up.railway.app';
@@ -651,9 +728,7 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
     try {
       const r = await fetch(`${API_URL}/lectures/${slug}`);
       return r.status === 200;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   async function uploadDictToDB() {
@@ -662,7 +737,6 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
 
     const statusEl = document.getElementById('upload-status');
     statusEl.style.display = 'block';
-
     let created = 0, updated = 0, errors = 0;
 
     for (const entry of dictionary) {
@@ -679,9 +753,7 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
         duration_minutes: entry.duration_minutes || null,
         transcript: entry.transcript || '',
       };
-
       statusEl.textContent = `Загружаю ${entry.slug}...`;
-
       try {
         const exists = await lectureExists(entry.slug);
         const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
@@ -693,26 +765,26 @@ ${transcript.slice(0, 8000)}${transcript.length > 8000 ? '\n...[текст об�
         });
         if (r.ok) { exists ? updated++ : created++; }
         else { errors++; console.error(entry.slug, r.status, await r.text()); }
-      } catch (e) {
-        errors++;
-        console.error(entry.slug, e);
-      }
+      } catch (e) { errors++; console.error(entry.slug, e); }
     }
-
     statusEl.textContent = `Готово: создано ${created}, обновлено ${updated}, ошибок ${errors}`;
   }
 
   function exportDict() {
-    const blob = new Blob([JSON.stringify(dictionary, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'club_dictionary.json'; a.click();
+    download(JSON.stringify(dictionary,null,2),'club_dictionary.json','application/json');
   }
 
   function clearDict() {
     if (!confirm('Очистить весь словарь?')) return;
-    dictionary = [];
+    dictionary=[];
     localStorage.removeItem('club_dict');
     renderDict();
+  }
+
+  function showError(msg) {
+    const el=document.getElementById('error-box');
+    el.textContent=msg;
+    el.classList.toggle('visible',!!msg);
   }
 
   renderDict();
