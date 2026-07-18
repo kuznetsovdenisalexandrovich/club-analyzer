@@ -295,10 +295,10 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
   <div class="result-wrap" id="result-wrap" style="margin-top:16px">
     <div class="card">
       <div class="result-header">
-        <div class="result-title">Карточка готова</div>
+        <div class="result-title">Карточка готова (уже в словаре)</div>
         <div class="result-actions">
           <button class="copy-btn" onclick="copyJson()">Копировать JSON</button>
-          <button class="copy-btn" onclick="addToDict()">+ В словарь</button>
+          <button class="copy-btn" onclick="uploadOneToDB()" style="color:var(--green)">Загрузить в базу</button>
         </div>
       </div>
 
@@ -582,6 +582,7 @@ ${slugInstruction}
 
       setStage('s4','done','Карточка сформирована');
       showResult(card, transcript, currentTimecodes);
+      addToDict(); // сразу в словарь, с полным транскриптом — вручную жать не нужно
 
     } catch(err) {
       showError(err.message);
@@ -738,6 +739,43 @@ ${slugInstruction}
     } catch (e) { return false; }
   }
 
+  async function uploadEntryToDB(entry) {
+    const payload = {
+      slug: entry.slug,
+      title: entry.title || '',
+      description: entry.description || '',
+      link: entry.link || '',
+      link_vk: entry.link_vk || '',
+      type: entry.type || 'lecture',
+      tags: entry.tags || [],
+      topics: entry.topics || [],
+      timecodes: entry.timecodes || [],
+      duration_minutes: entry.duration_minutes || null,
+      transcript: entry.transcript || '',
+    };
+    const exists = await lectureExists(entry.slug);
+    const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
+    const method = exists ? 'PUT' : 'POST';
+    const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) console.error(entry.slug, r.status, await r.text());
+    return { ok: r.ok, created: !exists };
+  }
+
+  async function uploadOneToDB() {
+    if (!currentResult) return;
+    const entry = dictionary.find(d => d.slug === currentResult.slug) || currentResult;
+    try {
+      const { ok, created } = await uploadEntryToDB(entry);
+      alert(ok ? (created ? 'Создано в базе!' : 'Обновлено в базе!') : 'Ошибка загрузки — смотри консоль');
+    } catch (e) {
+      alert('Ошибка соединения');
+    }
+  }
+
   async function uploadDictToDB() {
     if (!dictionary.length) { alert('Словарь пуст — нечего загружать'); return; }
     if (!confirm(`Загрузить ${dictionary.length} записей в базу?`)) return;
@@ -747,31 +785,11 @@ ${slugInstruction}
     let created = 0, updated = 0, errors = 0;
 
     for (const entry of dictionary) {
-      const payload = {
-        slug: entry.slug,
-        title: entry.title || '',
-        description: entry.description || '',
-        link: entry.link || '',
-        link_vk: entry.link_vk || '',
-        type: entry.type || 'lecture',
-        tags: entry.tags || [],
-        topics: entry.topics || [],
-        timecodes: entry.timecodes || [],
-        duration_minutes: entry.duration_minutes || null,
-        transcript: entry.transcript || '',
-      };
       statusEl.textContent = `Загружаю ${entry.slug}...`;
       try {
-        const exists = await lectureExists(entry.slug);
-        const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
-        const method = exists ? 'PUT' : 'POST';
-        const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (r.ok) { exists ? updated++ : created++; }
-        else { errors++; console.error(entry.slug, r.status, await r.text()); }
+        const r = await uploadEntryToDB(entry);
+        if (r.ok) { r.created ? created++ : updated++; }
+        else errors++;
       } catch (e) { errors++; console.error(entry.slug, e); }
     }
     statusEl.textContent = `Готово: создано ${created}, обновлено ${updated}, ошибок ${errors}`;
