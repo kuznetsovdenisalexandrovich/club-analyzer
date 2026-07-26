@@ -12,726 +12,165 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;900&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;900&family=Manrope:wght@400;500;600;700&display=swap');
 
-/* ═══════════════════════════════════════
-   ПАЛИТРА И ТОКЕНЫ
-═══════════════════════════════════════ */
-:root {
-  --lav:      #9b8cf2;
-  --lav-deep: #7c6cf0;
-  --lav-dim:  rgba(155,140,242,0.16);
-  --peach:    #ffb199;
-  --mint:     #8fe3c0;
-  --coral:    #ff8fa3;
-  --green:    #3ecf8e;
-  --red:      #ff453a;
-  --disp:     'Unbounded', sans-serif;
-  --body:     'Manrope', sans-serif;
-}
-
-/* ── Светлая тема: Carton Warm Neumorphic ── */
 [data-theme="light"] {
-  --bg:          #e2dbd2;
-  --bg-alt:      #ddd6cc;
-  --text:        #3a3530;
-  --text-dim:    #6b6258;
-  --text-faint:  #a09890;
-  --line:        rgba(100,90,80,0.12);
-
-  /* Neumorphic shadows */
-  --sh-raised:   6px 6px 16px #c2bab0, -6px -6px 16px #faf4ec;
-  --sh-small:    3px 3px 9px  #c2bab0, -3px -3px 9px  #faf4ec;
-  --sh-inset:    inset 5px 5px 12px #c2bab0, inset -5px -5px 12px #faf4ec;
-  --sh-btn:      4px 4px 10px #c2bab0, -4px -4px 10px #faf4ec;
-
-  --card-bg:     #e2dbd2;
-  --input-bg:    #e2dbd2;
-  --surface:     #e2dbd2;
-  --border:      transparent;
-
-  --blob-op:     0;
-  --bd-filter:   none;
+  --bg:#f1ecfb; --bg-b:#e9effc; --bg-c:#fbeef6;
+  --surface:rgba(255,255,255,0.65); --surface2:rgba(255,255,255,0.85);
+  --border:rgba(255,255,255,0.6); --line:rgba(120,110,160,0.13);
+  --text:#2c2a3d; --text-dim:#6b6680; --text-faint:#a7a2bd;
+  --card-bg:rgba(255,255,255,0.55); --input-bg:rgba(255,255,255,0.5); --stat-bg:rgba(255,255,255,0.6);
+  --blob1-op:0.22; --blob2-op:0.18;
 }
-
-/* ── Тёмная тема: Club-app Glassmorphism ── */
 [data-theme="dark"] {
-  --bg:          #0c0a15;
-  --bg-alt:      #110e1e;
-  --text:        #f0eefc;
-  --text-dim:    #a29dc2;
-  --text-faint:  #655f80;
-  --line:        rgba(255,255,255,0.08);
+  --bg:#1e1c28; --bg-b:#221f30; --bg-c:#261e2e;
+  --surface:rgba(255,255,255,0.06); --surface2:rgba(255,255,255,0.09);
+  --border:rgba(255,255,255,0.10); --line:rgba(255,255,255,0.08);
+  --text:#ede9f8; --text-dim:#9d99b8; --text-faint:#5e5a78;
+  --card-bg:rgba(255,255,255,0.05); --input-bg:rgba(255,255,255,0.07); --stat-bg:rgba(255,255,255,0.07);
+  --blob1-op:0.15; --blob2-op:0.10;
+}
+:root {
+  --lav:#9b8cf2; --lav-deep:#7c6cf0; --lav-dim:rgba(155,140,242,0.16);
+  --peach:#ffb199; --mint:#8fe3c0; --coral:#ff8fa3;
+  --green:#3ecf8e; --red:#ff453a;
+  --disp:'Unbounded',sans-serif; --body:'Manrope',sans-serif;
+  --shadow:0 4px 20px -6px rgba(124,108,240,0.15);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);transition:background .3s}
+body{
+  font-family:var(--body);color:var(--text);min-height:100vh;
+  background:
+    radial-gradient(800px 500px at -10% -10%,var(--bg-c),transparent 60%),
+    radial-gradient(700px 500px at 110% 5%,var(--bg-b),transparent 55%),
+    var(--bg);
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom));
+  transition:background .3s,color .3s;
+}
+.blob{position:fixed;border-radius:50%;filter:blur(70px);pointer-events:none;z-index:0;transition:opacity .3s}
+.blob-1{width:300px;height:300px;top:-100px;right:-80px;background:var(--lav);opacity:var(--blob1-op)}
+.blob-2{width:250px;height:250px;bottom:15%;left:-100px;background:var(--peach);opacity:var(--blob2-op)}
+.blob-3{width:200px;height:200px;top:40%;right:-60px;background:var(--mint);opacity:var(--blob2-op)}
+.shell{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 16px}
 
-  --sh-raised:   0 4px 24px -6px rgba(124,108,240,0.2);
-  --sh-small:    0 2px 12px -4px rgba(124,108,240,0.15);
-  --sh-inset:    inset 0 2px 8px rgba(0,0,0,0.4);
-  --sh-btn:      0 4px 16px -4px rgba(124,108,240,0.25);
+header{padding:calc(env(safe-area-inset-top)+16px) 0 20px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--lav),var(--coral));display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:900;font-size:13px;color:white;box-shadow:0 6px 16px -4px rgba(155,140,242,0.45)}
+.brand-name{font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:-.01em}
+.brand-sub{font-size:11px;color:var(--text-faint);margin-top:1px}
+.icon-btn{width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer;font-size:15px;transition:transform .15s;color:var(--text)}
+.icon-btn:active{transform:scale(0.92)}
 
-  --card-bg:     rgba(255,255,255,0.05);
-  --input-bg:    rgba(255,255,255,0.07);
-  --surface:     rgba(255,255,255,0.06);
-  --border:      rgba(255,255,255,0.08);
+.pipeline{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 24px}
+.pipe-step{font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint)}
+.pipe-step.active{background:var(--lav-dim);color:var(--lav-deep);border-color:transparent}
+.pipe-arrow{color:var(--text-faint);font-size:11px;align-self:center}
 
-  --blob-op:     1;
-  --bd-filter:   blur(22px);
-}
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:18px;margin-bottom:14px;backdrop-filter:blur(20px);box-shadow:var(--shadow)}
+.card-title{font-family:var(--disp);font-weight:700;font-size:13px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.step-num{width:20px;height:20px;border-radius:6px;background:var(--lav-dim);color:var(--lav-deep);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
-/* ═══════════════════════════════════════
-   BASE
-═══════════════════════════════════════ */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+.field{margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.field input[type="text"],.field input[type="password"],.field textarea{
+  width:100%;font-size:13px;font-family:var(--body);padding:10px 14px;border-radius:12px;
+  border:1px solid var(--line);background:var(--input-bg);color:var(--text);
+}
+.field textarea{min-height:60px;resize:vertical}
+.key-row{display:flex;gap:8px}
+.key-row input{flex:1}
+.btn{font-family:var(--body);font-weight:600;font-size:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:10px 14px;cursor:pointer;transition:all .15s}
+.btn:active{transform:scale(0.96)}
+.btn-sm{padding:8px 12px}
+.note{font-size:12px;color:var(--text-faint);line-height:1.5;margin-top:8px}
+code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px}
 
-html {
-  background: var(--bg);
-  transition: background 0.35s, color 0.35s;
-}
+.upload-zone{border:2px dashed var(--line);border-radius:16px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .15s;position:relative}
+.upload-zone.drag-over{border-color:var(--lav-deep);background:var(--lav-dim)}
+.upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-label{font-size:13px;font-weight:600;margin-bottom:4px}
+.upload-hint{font-size:11px;color:var(--text-faint)}
+.file-info{display:none;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:var(--surface);border-radius:12px;font-size:12px}
+.file-info.visible{display:flex}
+.file-name{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-size{color:var(--text-faint)}
 
-body {
-  font-family: var(--body);
-  color: var(--text);
-  min-height: 100vh;
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-  padding-bottom: calc(32px + env(safe-area-inset-bottom));
-  transition: background 0.35s, color 0.35s;
-  position: relative;
-  overflow-x: hidden;
-}
+.btn-primary{width:100%;padding:14px;border-radius:14px;background:var(--lav-deep);color:white;font-family:var(--disp);font-weight:700;font-size:13px;border:none;cursor:pointer;transition:opacity .15s}
+.btn-primary:active{opacity:.8}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
 
-/* ═══════════════════════════════════════
-   BLOBS (только тёмная тема)
-═══════════════════════════════════════ */
-.blob {
-  position: fixed;
-  border-radius: 50%;
-  filter: blur(80px);
-  pointer-events: none;
-  z-index: 0;
-  opacity: var(--blob-op);
-  transition: opacity 0.35s;
-}
-.blob-1 {
-  width: 380px; height: 380px;
-  top: -120px; right: -100px;
-  background: var(--lav);
-  animation: blobFloat1 14s ease-in-out infinite;
-}
-.blob-2 {
-  width: 300px; height: 300px;
-  bottom: 10%; left: -120px;
-  background: var(--peach);
-  animation: blobFloat2 12s ease-in-out infinite;
-}
-.blob-3 {
-  width: 250px; height: 250px;
-  top: 45%; right: -80px;
-  background: var(--mint);
-  animation: blobFloat1 15s ease-in-out infinite reverse;
-}
+.error-box{display:none;background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.25);color:var(--red);border-radius:12px;padding:12px 14px;font-size:13px;margin-top:12px}
+.error-box.visible{display:block}
 
-@keyframes blobFloat1 {
-  0%,100% { transform: translate(0,0) scale(1); }
-  50%      { transform: translate(-20px, 30px) scale(1.07); }
-}
-@keyframes blobFloat2 {
-  0%,100% { transform: translate(0,0) scale(1); }
-  50%      { transform: translate(25px, -20px) scale(1.05); }
-}
+.progress-wrap{display:none}
+.progress-wrap.visible{display:block}
+.stage{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;color:var(--text-faint)}
+.stage.active{color:var(--text);font-weight:600}
+.stage.done{color:var(--green)}
+.stage.error{color:var(--red)}
+.stage-icon{width:16px;text-align:center;flex-shrink:0}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--lav-dim);border-top-color:var(--lav-deep);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-/* ═══════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════ */
-.shell {
-  position: relative;
-  z-index: 1;
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 0 16px;
-}
+.result-wrap{display:none}
+.result-wrap.visible{display:block}
+.result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.result-title{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--green)}
+.result-actions{display:flex;gap:8px;flex-wrap:wrap}
+.copy-btn{font-size:11px;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.copy-btn:active{transform:scale(0.96)}
+.export-btn{font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;background:var(--lav-dim);border:1px solid transparent;color:var(--lav-deep);cursor:pointer}
 
-/* ═══════════════════════════════════════
-   HEADER
-═══════════════════════════════════════ */
-header {
-  padding: calc(env(safe-area-inset-top) + 20px) 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{font-size:12px;font-weight:600;padding:8px 14px;cursor:pointer;color:var(--text-faint);border-bottom:2px solid transparent}
+.tab.active{color:var(--lav-deep);border-color:var(--lav-deep)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
 
-.brand { display: flex; align-items: center; gap: 12px; }
+.result-block{margin-bottom:14px}
+.result-block:last-child{margin-bottom:0}
+.result-block-label{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.result-content{font-size:13px;line-height:1.6;white-space:pre-wrap}
+.slug-row{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap;margin-bottom:6px}
+.slug-key{font-weight:700;background:var(--lav-dim);color:var(--lav-deep);padding:4px 10px;border-radius:8px}
+.slug-tag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);flex-shrink:0}
+.slug-link{color:var(--text-dim);word-break:break-all;font-size:12px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim)}
+.json-out{font-size:12px;background:var(--surface);border-radius:12px;padding:14px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow-y:auto}
 
-.mark {
-  width: 42px; height: 42px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--lav), var(--coral));
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--disp); font-weight: 900; font-size: 13px; color: #fff;
-  box-shadow: 0 6px 20px -4px rgba(155,140,242,0.5);
-  flex-shrink: 0;
-}
+.tc-list{display:flex;flex-direction:column;gap:6px}
+.tc-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface)}
+.tc-time{font-weight:700;font-size:11px;color:var(--lav-deep);background:var(--lav-dim);padding:3px 8px;border-radius:6px;flex-shrink:0;white-space:nowrap}
+.tc-text{font-size:13px;line-height:1.5}
 
-[data-theme="dark"] .mark {
-  animation: markPulse 3s ease-in-out infinite;
-}
-@keyframes markPulse {
-  0%,100% { box-shadow: 0 6px 20px -4px rgba(155,140,242,0.5); }
-  50%      { box-shadow: 0 6px 32px 0px rgba(155,140,242,0.75); }
-}
+.empty-dict{text-align:center;padding:24px;font-size:13px;color:var(--text-faint)}
+.dict-table{width:100%;border-collapse:collapse;font-size:12px}
+.dict-table th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);padding:6px 8px;border-bottom:1px solid var(--line)}
+.dict-table td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.key-cell{font-weight:600;white-space:nowrap}
+.title-cell{max-width:220px}
 
-.brand-name {
-  font-family: var(--disp);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.brand-sub {
-  font-size: 11px;
-  color: var(--text-faint);
-  margin-top: 2px;
-}
-
-.icon-btn {
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--text);
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-[data-theme="light"] .icon-btn {
-  box-shadow: var(--sh-small);
-  border-color: transparent;
-}
-[data-theme="dark"] .icon-btn {
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-}
-.icon-btn:active { transform: scale(0.91); }
-
-/* ═══════════════════════════════════════
-   PIPELINE
-═══════════════════════════════════════ */
-.pipeline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 28px;
-  align-items: center;
-}
-
-.pipe-step {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 20px;
-  color: var(--text-faint);
-  transition: all 0.2s;
-}
-[data-theme="light"] .pipe-step {
-  background: var(--bg);
-  box-shadow: var(--sh-small);
-}
-[data-theme="dark"] .pipe-step {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-}
-
-.pipe-step.active {
-  background: var(--lav-dim);
-  color: var(--lav-deep);
-}
-[data-theme="light"] .pipe-step.active {
-  box-shadow: var(--sh-inset);
-}
-[data-theme="dark"] .pipe-step.active {
-  border-color: rgba(155,140,242,0.3);
-}
-
-.pipe-arrow { color: var(--text-faint); font-size: 11px; }
-
-/* ═══════════════════════════════════════
-   CARDS
-═══════════════════════════════════════ */
-.card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  padding: 20px;
-  margin-bottom: 16px;
-  transition: box-shadow 0.2s, background 0.35s;
-}
-[data-theme="light"] .card {
-  box-shadow: var(--sh-raised);
-  border-color: transparent;
-}
-[data-theme="dark"] .card {
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-  box-shadow: 0 8px 32px -8px rgba(0,0,0,0.4);
-}
-
-.card-title {
-  font-family: var(--disp);
-  font-weight: 700;
-  font-size: 12px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  letter-spacing: 0.01em;
-}
-
-.step-num {
-  width: 22px; height: 22px;
-  border-radius: 7px;
-  background: var(--lav-dim);
-  color: var(--lav-deep);
-  font-size: 11px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-
-/* ═══════════════════════════════════════
-   FORM FIELDS
-═══════════════════════════════════════ */
-.field { margin-bottom: 14px; }
-.field:last-child { margin-bottom: 0; }
-
-.field label {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  margin-bottom: 7px;
-}
-
-.field input[type="text"],
-.field input[type="password"],
-.field textarea {
-  width: 100%;
-  font-size: 13px;
-  font-family: var(--body);
-  padding: 11px 14px;
-  border-radius: 13px;
-  border: 1px solid var(--border);
-  background: var(--input-bg);
-  color: var(--text);
-  outline: none;
-  transition: box-shadow 0.2s, border-color 0.2s;
-}
-[data-theme="light"] .field input[type="text"],
-[data-theme="light"] .field input[type="password"],
-[data-theme="light"] .field textarea {
-  box-shadow: var(--sh-inset);
-  border-color: transparent;
-}
-[data-theme="dark"] .field input[type="text"],
-[data-theme="dark"] .field input[type="password"],
-[data-theme="dark"] .field textarea {
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-}
-
-.field input:focus,
-.field textarea:focus {
-  border-color: rgba(155,140,242,0.4);
-}
-[data-theme="light"] .field input:focus,
-[data-theme="light"] .field textarea:focus {
-  box-shadow: var(--sh-inset), 0 0 0 2px rgba(155,140,242,0.15);
-}
-
-.field textarea { min-height: 64px; resize: vertical; }
-
-.key-row { display: flex; gap: 8px; }
-.key-row input { flex: 1; }
-
-.btn {
-  font-family: var(--body);
-  font-weight: 600;
-  font-size: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-[data-theme="light"] .btn {
-  box-shadow: var(--sh-small);
-  border-color: transparent;
-}
-[data-theme="dark"] .btn {
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-}
-.btn:active { transform: scale(0.95); }
-.btn-sm { padding: 8px 12px; }
-
-.note {
-  font-size: 12px;
-  color: var(--text-faint);
-  line-height: 1.55;
-  margin-top: 10px;
-}
-code.inline {
-  background: var(--lav-dim);
-  color: var(--lav-deep);
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 11px;
-}
-
-/* ═══════════════════════════════════════
-   UPLOAD ZONE
-═══════════════════════════════════════ */
-.upload-zone {
-  border: 2px dashed var(--line);
-  border-radius: 16px;
-  padding: 32px 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  position: relative;
-}
-[data-theme="light"] .upload-zone {
-  box-shadow: var(--sh-inset);
-  border-color: rgba(155,140,242,0.2);
-}
-.upload-zone.drag-over {
-  border-color: var(--lav-deep);
-  background: var(--lav-dim);
-}
-.upload-zone input[type="file"] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
-.upload-label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-.upload-hint  { font-size: 11px; color: var(--text-faint); }
-
-.file-info {
-  display: none; align-items: center; gap: 10px;
-  margin-top: 12px; padding: 10px 14px;
-  background: var(--lav-dim);
-  border-radius: 12px; font-size: 12px;
-}
-.file-info.visible { display: flex; }
-.file-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-size { color: var(--text-faint); flex-shrink: 0; }
-
-/* ═══════════════════════════════════════
-   PRIMARY BUTTON
-═══════════════════════════════════════ */
-.btn-primary {
-  width: 100%;
-  padding: 15px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--lav), var(--lav-deep));
-  color: #fff;
-  font-family: var(--disp);
-  font-weight: 700;
-  font-size: 13px;
-  border: none;
-  cursor: pointer;
-  letter-spacing: 0.02em;
-  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 6px 24px -6px rgba(124,108,240,0.5);
-}
-.btn-primary:active  { opacity: 0.85; transform: scale(0.98); }
-.btn-primary:disabled { opacity: 0.38; cursor: not-allowed; transform: none; }
-
-/* ═══════════════════════════════════════
-   ERROR
-═══════════════════════════════════════ */
-.error-box {
-  display: none;
-  background: rgba(255,69,58,0.1);
-  border: 1px solid rgba(255,69,58,0.25);
-  color: var(--red);
-  border-radius: 13px;
-  padding: 13px 16px;
-  font-size: 13px;
-  margin-top: 14px;
-}
-.error-box.visible { display: block; }
-
-/* ═══════════════════════════════════════
-   PROGRESS
-═══════════════════════════════════════ */
-.progress-wrap { display: none; }
-.progress-wrap.visible { display: block; }
-
-.stage {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 0; font-size: 13px;
-  color: var(--text-faint);
-  border-bottom: 1px solid var(--line);
-}
-.stage:last-child { border-bottom: none; }
-.stage.active { color: var(--text); font-weight: 600; }
-.stage.done   { color: var(--green); }
-.stage.error  { color: var(--red); }
-.stage-icon   { width: 18px; text-align: center; flex-shrink: 0; }
-
-.spinner {
-  display: inline-block;
-  width: 13px; height: 13px;
-  border: 2px solid var(--lav-dim);
-  border-top-color: var(--lav-deep);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ═══════════════════════════════════════
-   RESULT
-═══════════════════════════════════════ */
-.result-wrap { display: none; }
-.result-wrap.visible { display: block; }
-
-.result-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
-}
-.result-title {
-  font-family: var(--disp); font-weight: 700; font-size: 13px;
-  color: var(--green); letter-spacing: 0.01em;
-}
-.result-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.copy-btn {
-  font-size: 11px; font-weight: 600;
-  padding: 7px 12px; border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface); color: var(--text);
-  cursor: pointer; transition: transform 0.15s;
-}
-[data-theme="light"] .copy-btn {
-  box-shadow: var(--sh-small);
-  border-color: transparent;
-}
-.copy-btn:active { transform: scale(0.95); }
-
-.export-btn {
-  font-size: 11px; font-weight: 600;
-  padding: 5px 10px; border-radius: 8px;
-  background: var(--lav-dim); border: 1px solid transparent;
-  color: var(--lav-deep); cursor: pointer;
-  transition: transform 0.12s;
-}
-.export-btn:active { transform: scale(0.95); }
-
-/* ═══════════════════════════════════════
-   TABS
-═══════════════════════════════════════ */
-.tabs {
-  display: flex; gap: 2px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
-}
-.tab {
-  font-size: 12px; font-weight: 600;
-  padding: 8px 14px; cursor: pointer;
-  color: var(--text-faint);
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
-}
-.tab.active { color: var(--lav-deep); border-color: var(--lav-deep); }
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-
-/* ═══════════════════════════════════════
-   RESULT BLOCKS
-═══════════════════════════════════════ */
-.result-block { margin-bottom: 16px; }
-.result-block:last-child { margin-bottom: 0; }
-
-.result-block-label {
-  font-size: 10px; font-weight: 700;
-  color: var(--text-faint);
-  text-transform: uppercase; letter-spacing: 0.07em;
-  margin-bottom: 8px;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-}
-.result-content {
-  font-size: 13px; line-height: 1.65;
-  white-space: pre-wrap; color: var(--text);
-}
-
-.slug-row {
-  display: flex; align-items: center;
-  gap: 8px; font-size: 13px;
-  flex-wrap: wrap; margin-bottom: 6px;
-}
-.slug-key {
-  font-weight: 700;
-  background: var(--lav-dim); color: var(--lav-deep);
-  padding: 5px 12px; border-radius: 9px;
-}
-.slug-tag {
-  font-size: 10px; font-weight: 700;
-  padding: 3px 8px; border-radius: 7px;
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--text-faint); flex-shrink: 0;
-}
-[data-theme="light"] .slug-tag { box-shadow: var(--sh-small); border-color: transparent; }
-.slug-link { color: var(--text-dim); word-break: break-all; font-size: 12px; }
-
-.tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag {
-  font-size: 11px; font-weight: 600;
-  padding: 4px 11px; border-radius: 20px;
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-[data-theme="light"] .tag { box-shadow: var(--sh-small); border-color: transparent; }
-
-.json-out {
-  font-size: 12px;
-  background: var(--surface);
-  border-radius: 13px;
-  padding: 14px;
-  white-space: pre-wrap; word-break: break-all;
-  max-height: 400px; overflow-y: auto;
-  border: 1px solid var(--border);
-}
-[data-theme="light"] .json-out { box-shadow: var(--sh-inset); border-color: transparent; }
-
-/* ═══════════════════════════════════════
-   TIMECODES
-═══════════════════════════════════════ */
-.tc-list { display: flex; flex-direction: column; gap: 6px; }
-.tc-item {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 9px 12px; border-radius: 11px;
-  background: var(--surface); border: 1px solid var(--border);
-  transition: background 0.15s;
-}
-[data-theme="light"] .tc-item { box-shadow: var(--sh-small); border-color: transparent; }
-
-.tc-time {
-  font-weight: 700; font-size: 11px;
-  color: var(--lav-deep); background: var(--lav-dim);
-  padding: 3px 9px; border-radius: 6px;
-  flex-shrink: 0; white-space: nowrap;
-}
-.tc-text { font-size: 13px; line-height: 1.5; color: var(--text); }
-
-/* ═══════════════════════════════════════
-   DICTIONARY
-═══════════════════════════════════════ */
-.empty-dict { text-align: center; padding: 28px; font-size: 13px; color: var(--text-faint); }
-
-.dict-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.dict-table th {
-  text-align: left; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--text-faint); padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-}
-.dict-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.key-cell { font-weight: 600; white-space: nowrap; }
-.title-cell { max-width: 220px; }
-
-/* ═══════════════════════════════════════
-   PIN SCREEN
-═══════════════════════════════════════ */
-.pin-screen {
-  position: fixed; inset: 0; z-index: 9999;
-  background: var(--bg);
-  display: flex; align-items: center; justify-content: center; flex-direction: column;
-  gap: 24px;
-  transition: background 0.35s;
-}
-.pin-screen.hidden { display: none; }
-
-.pin-logo {
-  width: 62px; height: 62px; border-radius: 18px;
-  background: linear-gradient(135deg, var(--lav), var(--coral));
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--disp); font-weight: 900; font-size: 22px; color: #fff;
-  box-shadow: 0 10px 32px -6px rgba(155,140,242,0.55);
-}
-[data-theme="dark"] .pin-logo {
-  animation: markPulse 3s ease-in-out infinite;
-}
-
-.pin-title {
-  font-family: var(--disp); font-weight: 700;
-  font-size: 17px; letter-spacing: -0.01em;
-  color: var(--text);
-}
-
-.pin-dots { display: flex; gap: 14px; }
-.pin-dot {
-  width: 13px; height: 13px; border-radius: 50%;
-  background: var(--lav-dim);
-  transition: background 0.15s, transform 0.15s;
-}
-.pin-dot.filled { background: var(--lav-deep); }
-
-.pin-pad {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 10px; width: 252px;
-}
-
-.pin-btn {
-  height: 68px; border-radius: 18px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-family: var(--disp); font-weight: 700;
-  font-size: 22px; color: var(--text);
-  cursor: pointer; transition: all 0.12s;
-}
-[data-theme="light"] .pin-btn {
-  box-shadow: var(--sh-btn);
-  border-color: transparent;
-}
-[data-theme="dark"] .pin-btn {
-  backdrop-filter: var(--bd-filter);
-  -webkit-backdrop-filter: var(--bd-filter);
-}
-.pin-btn:active { transform: scale(0.91); background: var(--lav-dim); }
-.pin-btn.del { font-size: 18px; color: var(--text-faint); }
-
-.pin-error {
-  font-size: 13px; color: var(--red);
-  height: 20px; text-align: center; font-weight: 600;
-}
-
-/* ═══════════════════════════════════════
-   UPLOAD STATUS
-═══════════════════════════════════════ */
-#upload-status {
-  padding: 10px 0; font-size: 13px; color: var(--text-dim);
-}
-
-/* ═══════════════════════════════════════
-   DIVIDER
-═══════════════════════════════════════ */
-.dict-header-row {
-  display: flex; justify-content: space-between; align-items: center;
-}
-
+/* PIN screen */
+.pin-screen{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px}
+.pin-screen.hidden{display:none}
+.pin-logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--lav),var(--coral));display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:900;font-size:20px;color:white;box-shadow:0 8px 24px -6px rgba(155,140,242,0.45)}
+.pin-title{font-family:var(--disp);font-weight:700;font-size:18px;letter-spacing:-.01em;color:var(--text)}
+.pin-dots{display:flex;gap:12px}
+.pin-dot{width:12px;height:12px;border-radius:50%;background:var(--lav-dim);transition:background .15s}
+.pin-dot.filled{background:var(--lav-deep)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:240px}
+.pin-btn{height:64px;border-radius:16px;border:1px solid var(--border);background:var(--surface);font-family:var(--disp);font-weight:700;font-size:20px;color:var(--text);cursor:pointer;transition:all .12s;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.pin-btn:active{transform:scale(0.94);background:var(--lav-dim)}
+.pin-btn.del{font-size:16px;color:var(--text-faint)}
+.pin-error{font-size:13px;color:var(--red);height:18px;text-align:center}
 </style>
 </head>
 <body>
-
-<!-- ── PIN SCREEN ── -->
 <div class="pin-screen" id="pin-screen">
   <div class="pin-logo">БП</div>
   <div class="pin-title">Введите пин-код</div>
@@ -759,14 +198,12 @@ code.inline {
   </div>
 </div>
 
-<!-- ── BLOBS ── -->
 <div class="blob blob-1"></div>
 <div class="blob blob-2"></div>
 <div class="blob blob-3"></div>
 
 <div class="shell">
 
-  <!-- HEADER -->
   <header>
     <div class="brand">
       <div class="mark">БП</div>
@@ -775,10 +212,17 @@ code.inline {
         <div class="brand-sub">Видео/аудио → транскрипт → карточка</div>
       </div>
     </div>
-    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Переключить тему">🌙</button>
+    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Тёмная тема">🌙</button>
   </header>
 
-  <!-- PIPELINE -->
+  <div class="tabs" style="margin-bottom:20px">
+    <div class="mode-tab tab active" onclick="switchMode('new')">Новое видео</div>
+    <div class="mode-tab tab" onclick="switchMode('library')">Библиотека</div>
+    <div class="mode-tab tab" onclick="switchMode('digests')">Дайджесты</div>
+  </div>
+
+  <div class="mode-panel active" id="mode-new">
+
   <div class="pipeline">
     <span class="pipe-step active">Видео/Аудио</span>
     <span class="pipe-arrow">→</span>
@@ -791,7 +235,7 @@ code.inline {
     <span class="pipe-step">Словарь</span>
   </div>
 
-  <!-- STEP 1: API KEY -->
+  <!-- API Key -->
   <div class="card">
     <div class="card-title"><span class="step-num">1</span> OpenAI API Key</div>
     <div class="field">
@@ -804,7 +248,7 @@ code.inline {
     </div>
   </div>
 
-  <!-- STEP 2: FILE -->
+  <!-- File -->
   <div class="card">
     <div class="card-title"><span class="step-num">2</span> Файл с записью</div>
     <div class="upload-zone" id="drop-zone">
@@ -819,7 +263,7 @@ code.inline {
     <div class="note" style="margin-top:12px">Больше 25 МБ? Сожмите: <code class="inline">ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 -b:a 32k out.mp3</code></div>
   </div>
 
-  <!-- STEP 3: CONTEXT -->
+  <!-- Context -->
   <div class="card">
     <div class="card-title"><span class="step-num">3</span> Контекст (необязательно)</div>
     <div class="field">
@@ -844,8 +288,8 @@ code.inline {
 
   <div class="error-box" id="error-box"></div>
 
-  <!-- PROGRESS -->
-  <div class="progress-wrap" id="progress-wrap" style="margin-top:18px">
+  <!-- Progress -->
+  <div class="progress-wrap" id="progress-wrap" style="margin-top:16px">
     <div class="card">
       <div class="card-title">Обработка</div>
       <div id="s1" class="stage"><span class="stage-icon">·</span> Отправка в Whisper...</div>
@@ -855,8 +299,8 @@ code.inline {
     </div>
   </div>
 
-  <!-- RESULT -->
-  <div class="result-wrap" id="result-wrap" style="margin-top:18px">
+  <!-- Result -->
+  <div class="result-wrap" id="result-wrap" style="margin-top:16px">
     <div class="card">
       <div class="result-header">
         <div class="result-title">Карточка готова (уже в словаре)</div>
@@ -869,11 +313,11 @@ code.inline {
       <div class="tabs">
         <div class="tab active" onclick="switchTab('card')">Карточка</div>
         <div class="tab" onclick="switchTab('timecodes')">Таймкоды</div>
+        <div class="tab" onclick="switchTab('insights')">Выжимка</div>
         <div class="tab" onclick="switchTab('transcript')">Транскрипт</div>
         <div class="tab" onclick="switchTab('json')">JSON</div>
       </div>
 
-      <!-- TAB: CARD -->
       <div class="tab-panel active" id="tab-card">
         <div class="result-block">
           <div class="result-block-label">Ключ и ссылки</div>
@@ -899,7 +343,6 @@ code.inline {
         </div>
       </div>
 
-      <!-- TAB: TIMECODES -->
       <div class="tab-panel" id="tab-timecodes">
         <div class="result-block">
           <div class="result-block-label">
@@ -915,7 +358,20 @@ code.inline {
         </div>
       </div>
 
-      <!-- TAB: TRANSCRIPT -->
+      <div class="tab-panel" id="tab-insights">
+        <div class="result-block">
+          <div class="result-block-label">
+            <span>Ключевые мысли — редактируемо</span>
+            <span style="display:flex;gap:6px">
+              <button class="export-btn" onclick="generateInsightsForCurrent()">Сгенерировать выжимку</button>
+              <button class="export-btn" onclick="addInsightRow('current-insights-list')">+ Мысль вручную</button>
+            </span>
+          </div>
+          <div id="current-insights-status" class="note"></div>
+          <div id="current-insights-list"></div>
+        </div>
+      </div>
+
       <div class="tab-panel" id="tab-transcript">
         <div class="result-block">
           <div class="result-block-label">
@@ -930,7 +386,6 @@ code.inline {
         </div>
       </div>
 
-      <!-- TAB: JSON -->
       <div class="tab-panel" id="tab-json">
         <div class="result-block">
           <div class="result-block-label">
@@ -950,23 +405,90 @@ code.inline {
     </div>
   </div>
 
-  <!-- DICTIONARY -->
-  <div class="card" style="margin-top:28px">
-    <div class="card-title dict-header-row">
+  <!-- Dictionary -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-title" style="justify-content:space-between; display:flex; align-items:center">
       <span><span class="step-num">Д</span> Словарь</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="uploadDictToDB()" style="color:var(--green)">Загрузить в базу</button>
         <button class="copy-btn" onclick="exportDict()">Экспорт JSON</button>
         <button class="copy-btn" onclick="clearDict()" style="color:var(--red)">Очистить</button>
       </div>
     </div>
-    <div id="upload-status" style="display:none"></div>
+    <div id="upload-status" style="display:none;padding:10px 0;font-size:13px;color:var(--text-dim)"></div>
     <div id="dict-container">
       <div class="empty-dict">Словарь пуст — проанализируйте первое видео</div>
     </div>
   </div>
 
-</div><!-- /.shell -->
+  </div><!-- /mode-new -->
+
+  <!-- ═══ Библиотека: новый проход по уже существующим лекциям ═══ -->
+  <div class="mode-panel" id="mode-library" style="display:none">
+    <div class="card">
+      <div class="card-title"><span class="step-num">1</span> OpenAI API Key</div>
+      <div class="field">
+        <label>API Key (только GPT-4o — Whisper здесь не нужен, транскрипт уже есть)</label>
+        <div class="key-row">
+          <input type="password" id="lib-openai-key" placeholder="sk-..." />
+          <button class="btn btn-sm" onclick="toggleKey('lib-openai-key')">Показать</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">2</span> Лекции из базы</span>
+        <button class="btn btn-sm" onclick="loadLibraryFromDB()">Загрузить из базы</button>
+      </div>
+      <div class="note" id="lib-status">Ещё не загружено</div>
+      <div class="tag-filter-row" id="lib-stream-tabs" style="display:none;flex-wrap:wrap;gap:6px;margin-top:12px"></div>
+    </div>
+
+    <div id="lib-list"></div>
+  </div>
+
+  <!-- ═══ Дайджесты: сборка из ключевых мыслей выбранных лекций ═══ -->
+  <div class="mode-panel" id="mode-digests" style="display:none">
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">1</span> Выбери лекции</span>
+        <button class="btn btn-sm" onclick="loadLibraryFromDB()">Загрузить из базы</button>
+      </div>
+      <div class="note">Нужны лекции с уже готовой выжимкой — сгенерируй её на вкладке "Библиотека", если ещё нет.</div>
+      <div id="digest-lecture-picker" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="step-num">2</span> Дайджест</div>
+      <div class="field">
+        <label>Название</label>
+        <input type="text" id="digest-title" placeholder="Дайджест — июль 2026" />
+      </div>
+      <div class="field">
+        <label>Месяц (для сортировки)</label>
+        <input type="text" id="digest-month" placeholder="2026-07" />
+      </div>
+      <button class="btn btn-sm" onclick="assembleDigestDraft()">Собрать из выбранных лекций</button>
+      <div class="field" style="margin-top:14px">
+        <label>Текст дайджеста (редактируемый)</label>
+        <div contenteditable="true" id="digest-editor" style="min-height:240px;border:1px solid var(--line);background:var(--input-bg);border-radius:12px;padding:14px;font-size:13px;line-height:1.6"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn-primary" style="flex:1" onclick="saveDigest()">Сохранить дайджест</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">Д</span> Сохранённые дайджесты</span>
+        <button class="btn btn-sm" onclick="loadDigestsList()">Обновить</button>
+      </div>
+      <div id="digests-list"><div class="empty-dict">Ещё не загружено</div></div>
+    </div>
+  </div>
+
+</div>
 
 <script>
   // ── Тема ──
@@ -989,6 +511,10 @@ code.inline {
   let currentTranscript = '';
   let currentTimecodes = [];
   let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
+
+  let libraryLoaded = false;
+  let libraryLectures = [];
+  let libActiveStream = 'all';
 
   // ── File handling ──
   const fileInput = document.getElementById('file-input');
@@ -1205,12 +731,124 @@ ${slugInstruction}
     const jsonOut = {...card};
     delete jsonOut._transcript;
     document.getElementById('res-json').textContent = JSON.stringify(jsonOut, null, 2);
+
+    document.getElementById('current-insights-status').textContent = '';
+    renderInsightsList('current-insights-list', card.key_insights || []);
+  }
+
+  // ── Ключевые мысли (второй проход поверх ПОЛНОГО транскрипта, не обрубленных
+  //    60-символьных огрызков сегментов, которыми питается основной анализ) ──
+
+  async function extractKeyInsights(apiKey, transcript, timecodes, title) {
+    const tcList = (timecodes||[]).map(t => `${t.time} — ${t.label}`).join('\n') || '(таймкоды не заданы)';
+    const prompt = `Ты помогаешь Денису (эксперту по продажам и маркетингу) сделать выжимку из его лекции "${title||''}" для карточки в приложении клуба.
+
+Полный транскрипт лекции:
+---
+${transcript}
+---
+
+Уже готовый список таймкодов этой лекции:
+${tcList}
+
+Вычлени 3-6 САМЫХ ЦЕННЫХ мыслей лекции. Формулируй ДИРЕКТИВНО, как будто сам Денис объясняет — без "участники узнают", "в этой лекции рассматривается" и прочих ИИ-расшаркиваний. Пиши прямо мысль, как готовую цитату для карточки.
+
+Для каждой мысли дай:
+- insight: сама мысль, 1-3 предложения, директивно
+- phrase: дословная или близкая к дословной фраза-пример ИЗ ТРАНСКРИПТА, которой Денис это иллюстрирует
+- timecode: выбери БЛИЖАЙШИЙ подходящий таймкод из списка выше (просто скопируй его time, ничего не выдумывай)
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"...","timecode":"0:00"}]}`;
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
+    }
+    const data = await r.json();
+    const raw = data.choices[0].message.content;
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    return parsed.insights || [];
+  }
+
+  function insightRowHtml(ins, idx) {
+    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:8px" data-idx="${idx}">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="tc-time" style="cursor:text" contenteditable="true" data-field="timecode">${ins.timecode||'0:00'}</span>
+        <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить</button>
+      </div>
+      <textarea class="insight-field" data-field="insight" style="width:100%;min-height:50px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.insight||''}</textarea>
+      <div style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Пример фразы</div>
+      <textarea class="insight-field" data-field="phrase" style="width:100%;min-height:40px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.phrase||''}</textarea>
+    </div>`;
+  }
+
+  function renderInsightsList(containerId, insights) {
+    const el = document.getElementById(containerId);
+    if (!insights || !insights.length) {
+      el.innerHTML = '<div style="color:var(--text-faint);font-size:13px">Выжимки ещё нет — нажми "Сгенерировать выжимку"</div>';
+      return;
+    }
+    el.innerHTML = '<div class="tc-list">' + insights.map(insightRowHtml).join('') + '</div>';
+  }
+
+  function addInsightRow(containerId) {
+    const el = document.getElementById(containerId);
+    if (el.querySelector('.tc-list')) {
+      el.querySelector('.tc-list').insertAdjacentHTML('beforeend', insightRowHtml({}, Date.now()));
+    } else {
+      el.innerHTML = '<div class="tc-list">' + insightRowHtml({}, Date.now()) + '</div>';
+    }
+  }
+
+  function collectInsights(containerId) {
+    const el = document.getElementById(containerId);
+    return Array.from(el.querySelectorAll('.tc-item')).map(row => ({
+      timecode: row.querySelector('[data-field="timecode"]').textContent.trim(),
+      insight:  row.querySelector('[data-field="insight"]').value.trim(),
+      phrase:   row.querySelector('[data-field="phrase"]').value.trim(),
+    })).filter(i => i.insight);
+  }
+
+  async function generateInsightsForCurrent() {
+    const key = document.getElementById('openai-key').value.trim();
+    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
+    if (!currentResult || !currentTranscript) { alert('Сначала проанализируй видео'); return; }
+    const statusEl = document.getElementById('current-insights-status');
+    statusEl.textContent = 'Генерирую...';
+    try {
+      const insights = await extractKeyInsights(key, currentTranscript, currentTimecodes, currentResult.title);
+      currentResult.key_insights = insights;
+      renderInsightsList('current-insights-list', insights);
+      addToDict(); // обновляем запись в словаре с новой выжимкой
+      statusEl.textContent = `Готово — ${insights.length} мыслей. Отредактируй при желании и сохрани через "Загрузить в базу".`;
+    } catch (e) {
+      statusEl.textContent = '';
+      alert(e.message);
+    }
   }
 
   function switchTab(name) {
-    const names = ['card','timecodes','transcript','json'];
-    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
-    document.querySelectorAll('.tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
+    const names = ['card','timecodes','insights','transcript','json'];
+    document.querySelectorAll('#result-wrap .tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+    document.querySelectorAll('#result-wrap .tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
+  }
+
+  function switchMode(name){
+    ['new','library','digests'].forEach(m => {
+      document.getElementById('mode-'+m).style.display = (m===name) ? 'block' : 'none';
+    });
+    document.querySelectorAll('.mode-tab').forEach((t,i) => {
+      t.classList.toggle('active', ['new','library','digests'][i]===name);
+    });
+    if (name === 'library' && !libraryLoaded) loadLibraryFromDB();
+    if (name === 'digests' && !libraryLoaded) loadLibraryFromDB();
+    if (name === 'digests') loadDigestsList();
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
@@ -1318,6 +956,7 @@ ${slugInstruction}
       tags: entry.tags || [],
       topics: entry.topics || [],
       timecodes: entry.timecodes || [],
+      key_insights: entry.key_insights || [],
       duration_minutes: entry.duration_minutes || null,
       transcript: entry.transcript || '',
     };
@@ -1335,6 +974,10 @@ ${slugInstruction}
 
   async function uploadOneToDB() {
     if (!currentResult) return;
+    if (document.getElementById('current-insights-list').querySelector('.tc-item')) {
+      currentResult.key_insights = collectInsights('current-insights-list');
+      addToDict();
+    }
     const entry = dictionary.find(d => d.slug === currentResult.slug) || currentResult;
     try {
       const { ok, created } = await uploadEntryToDB(entry);
@@ -1372,6 +1015,233 @@ ${slugInstruction}
     dictionary=[];
     localStorage.removeItem('club_dict');
     renderDict();
+  }
+
+  // ── Библиотека: новый проход по уже существующим лекциям ──────────────────────
+  // Whisper здесь не нужен — транскрипт уже сохранён в базе, дёргаем только GPT-4o.
+
+  function streamPrefixOf(slug) {
+    const m = /^(.*?)_l\d+_/.exec(slug || '');
+    return m ? m[1] : 'без потока';
+  }
+
+  async function loadLibraryFromDB() {
+    const statusEl = document.getElementById('lib-status');
+    statusEl.textContent = 'Загружаю...';
+    try {
+      const r = await fetch(`${API_URL}/lectures?limit=500`);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      libraryLectures = await r.json();
+      libraryLoaded = true;
+      statusEl.textContent = `Загружено ${libraryLectures.length} лекций`;
+      renderStreamTabs();
+      renderLibraryList();
+      renderDigestPicker();
+    } catch (e) {
+      statusEl.textContent = 'Не удалось загрузить: ' + e.message;
+    }
+  }
+
+  function renderStreamTabs() {
+    const el = document.getElementById('lib-stream-tabs');
+    const streams = [...new Set(libraryLectures.map(l => streamPrefixOf(l.slug)))].sort();
+    if (!streams.length) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    const chip = (key, label) => `<span class="tag" style="cursor:pointer;${libActiveStream===key?'background:var(--lav-dim);color:var(--lav-deep);border-color:transparent':''}" onclick="filterLibraryByStream('${key}')">${label}</span>`;
+    el.innerHTML = chip('all', `Все (${libraryLectures.length})`) + streams.map(s => {
+      const count = libraryLectures.filter(l => streamPrefixOf(l.slug)===s).length;
+      return chip(s, `${s} (${count})`);
+    }).join('');
+  }
+
+  function filterLibraryByStream(key) {
+    libActiveStream = key;
+    renderStreamTabs();
+    renderLibraryList();
+  }
+
+  function renderLibraryList() {
+    const el = document.getElementById('lib-list');
+    const rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
+    if (!rows.length) { el.innerHTML = '<div class="empty-dict">Ничего не найдено</div>'; return; }
+    el.innerHTML = rows.map(l => {
+      const hasInsights = (l.key_insights||[]).length > 0;
+      return `<div class="card" id="lib-card-${l.slug}">
+        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+          <span style="font-size:13px">${l.title}</span>
+          <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Редактировать' : 'Сгенерировать выжимку'}</button>
+        </div>
+        <div class="note">${l.slug} · ${(l.tags||[]).map(t=>'#'+t).join(' ')}</div>
+        <div id="lib-editor-${l.slug}" style="display:none;margin-top:14px">
+          <div class="note" id="lib-status-${l.slug}"></div>
+          <div id="lib-insights-${l.slug}"></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-sm" onclick="generateLibInsights('${l.slug}')">${hasInsights ? 'Перегенерировать' : 'Сгенерировать'}</button>
+            <button class="btn btn-sm" onclick="addInsightRow('lib-insights-${l.slug}')">+ Мысль вручную</button>
+            <button class="btn-primary" style="flex:1" onclick="saveLibInsights('${l.slug}')">Сохранить в базу</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function toggleLibInsightEditor(slug) {
+    const el = document.getElementById('lib-editor-'+slug);
+    const opening = el.style.display === 'none';
+    el.style.display = opening ? 'block' : 'none';
+    if (opening) {
+      const lec = libraryLectures.find(l => l.slug === slug);
+      renderInsightsList('lib-insights-'+slug, lec.key_insights || []);
+    }
+  }
+
+  async function generateLibInsights(slug) {
+    const key = document.getElementById('lib-openai-key').value.trim();
+    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
+    const lec = libraryLectures.find(l => l.slug === slug);
+    if (!lec || !lec.transcript) { alert('У этой лекции нет сохранённого транскрипта'); return; }
+    const statusEl = document.getElementById('lib-status-'+slug);
+    statusEl.textContent = 'Генерирую...';
+    try {
+      const insights = await extractKeyInsights(key, lec.transcript, lec.timecodes, lec.title);
+      lec.key_insights = insights;
+      renderInsightsList('lib-insights-'+slug, insights);
+      statusEl.textContent = `Готово — ${insights.length} мыслей. Проверь и сохрани.`;
+    } catch (e) {
+      statusEl.textContent = '';
+      alert(e.message);
+    }
+  }
+
+  async function saveLibInsights(slug) {
+    const insights = collectInsights('lib-insights-'+slug);
+    const statusEl = document.getElementById('lib-status-'+slug);
+    statusEl.textContent = 'Сохраняю...';
+    try {
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key_insights: insights }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const lec = libraryLectures.find(l => l.slug === slug);
+      lec.key_insights = insights;
+      statusEl.textContent = 'Сохранено в базе';
+      renderLibraryList(); // обновит подпись кнопки на "Редактировать"
+      renderDigestPicker();
+    } catch (e) {
+      statusEl.textContent = 'Ошибка сохранения: ' + e.message;
+    }
+  }
+
+  // ── Дайджесты ──────────────────────────────────────────────────────────────
+
+  let currentDigestId = null;
+
+  function renderDigestPicker() {
+    const el = document.getElementById('digest-lecture-picker');
+    if (!libraryLectures.length) { el.innerHTML = '<div class="empty-dict">Сначала загрузи библиотеку</div>'; return; }
+    el.innerHTML = libraryLectures.map(l => {
+      const has = (l.key_insights||[]).length > 0;
+      return `<label style="display:flex;align-items:center;gap:8px;padding:8px 4px;font-size:13px;border-bottom:1px solid var(--line);${has?'':'opacity:.5'}">
+        <input type="checkbox" class="digest-pick" value="${l.slug}" ${has?'':'disabled'}>
+        <span style="flex:1">${l.title}</span>
+        <span style="font-size:11px;color:var(--text-faint)">${has ? (l.key_insights.length+' мыслей') : 'нет выжимки'}</span>
+      </label>`;
+    }).join('');
+  }
+
+  function assembleDigestDraft() {
+    const picked = Array.from(document.querySelectorAll('.digest-pick:checked')).map(c => c.value);
+    if (!picked.length) { alert('Отметь хотя бы одну лекцию с готовой выжимкой'); return; }
+    const html = picked.map(slug => {
+      const l = libraryLectures.find(x => x.slug === slug);
+      if (!l) return '';
+      const insightsHtml = (l.key_insights||[]).map(ins => `
+        <p><b>${ins.insight}</b></p>
+        <details style="margin:4px 0 12px"><summary style="cursor:pointer;color:var(--lav-deep);font-size:12px">Пример фразы ›</summary><p style="font-style:italic;margin-top:6px">${ins.phrase||''}</p></details>`
+      ).join('');
+      const link = l.link || l.link_vk || '';
+      return `<h3>${l.title}</h3>${insightsHtml}${link ? `<p><a href="${link}">Смотреть лекцию →</a></p>` : ''}<hr style="margin:16px 0;border:none;border-top:1px solid var(--line)">`;
+    }).join('');
+    document.getElementById('digest-editor').innerHTML = html;
+    if (!document.getElementById('digest-title').value) {
+      const now = new Date();
+      document.getElementById('digest-title').value = `Дайджест — ${now.toLocaleDateString('ru',{month:'long',year:'numeric'})}`;
+      document.getElementById('digest-month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    }
+    document.getElementById('digest-editor').dataset.slugs = JSON.stringify(picked);
+  }
+
+  async function saveDigest() {
+    const title = document.getElementById('digest-title').value.trim();
+    const month = document.getElementById('digest-month').value.trim();
+    const content_html = document.getElementById('digest-editor').innerHTML;
+    const lecture_slugs = JSON.parse(document.getElementById('digest-editor').dataset.slugs || '[]');
+    if (!title || !content_html.trim()) { alert('Нужны название и собранный текст'); return; }
+
+    const payload = { title, month, content_html, lecture_slugs };
+    const url = currentDigestId ? `${API_URL}/digests/${currentDigestId}` : `${API_URL}/digests`;
+    const method = currentDigestId ? 'PUT' : 'POST';
+    try {
+      const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      alert('Дайджест сохранён');
+      loadDigestsList();
+    } catch (e) {
+      alert('Ошибка сохранения: ' + e.message);
+    }
+  }
+
+  async function loadDigestsList() {
+    const el = document.getElementById('digests-list');
+    try {
+      const r = await fetch(`${API_URL}/digests`);
+      const rows = await r.json();
+      if (!rows.length) { el.innerHTML = '<div class="empty-dict">Дайджестов ещё нет</div>'; return; }
+      el.innerHTML = rows.map(d => `
+        <div class="slug-row" style="justify-content:space-between">
+          <span><span class="slug-key">${d.month||'—'}</span> ${d.title} ${d.published?'<span class="tag" style="background:var(--lav-dim);color:var(--lav-deep)">опубликован</span>':''}</span>
+          <span style="display:flex;gap:6px">
+            <button class="export-btn" onclick="editDigest(${d.id})">Редактировать</button>
+            <button class="export-btn" onclick="togglePublishDigest(${d.id}, ${!d.published})">${d.published?'Снять с публикации':'Опубликовать'}</button>
+            <button class="export-btn" style="color:var(--red)" onclick="deleteDigest(${d.id})">Удалить</button>
+          </span>
+        </div>`).join('');
+    } catch (e) {
+      el.innerHTML = '<div class="empty-dict">Не удалось загрузить</div>';
+    }
+  }
+
+  async function editDigest(id) {
+    const r = await fetch(`${API_URL}/digests/${id}`);
+    if (!r.ok) { alert('Не удалось загрузить дайджест'); return; }
+    const d = await r.json();
+    currentDigestId = d.id;
+    document.getElementById('digest-title').value = d.title;
+    document.getElementById('digest-month').value = d.month;
+    document.getElementById('digest-editor').innerHTML = d.content_html;
+    document.getElementById('digest-editor').dataset.slugs = JSON.stringify(d.lecture_slugs || []);
+    (d.lecture_slugs || []).forEach(slug => {
+      const cb = document.querySelector(`.digest-pick[value="${slug}"]`);
+      if (cb) cb.checked = true;
+    });
+  }
+
+  async function togglePublishDigest(id, publish) {
+    await fetch(`${API_URL}/digests/${id}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ published: publish }),
+    });
+    loadDigestsList();
+  }
+
+  async function deleteDigest(id) {
+    if (!confirm('Удалить дайджест?')) return;
+    await fetch(`${API_URL}/digests/${id}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, { method: 'DELETE' });
+    if (currentDigestId === id) currentDigestId = null;
+    loadDigestsList();
   }
 
   function showError(msg) {
