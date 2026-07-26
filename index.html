@@ -1279,11 +1279,17 @@ ${tcList}
     el.innerHTML = coverHtml + rows.map(l => {
       const hasInsights = (l.key_insights||[]).length > 0;
       return `<div class="card" id="lib-card-${l.slug}">
-        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;gap:8px">
           <span style="font-size:13px">${l.title}</span>
-          <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Редактировать' : 'Сгенерировать выжимку'}</button>
+          <span style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-sm" onclick="toggleLibCardEditor('${l.slug}')">Карточка</button>
+            <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Выжимка' : 'Сгенерировать выжимку'}</button>
+          </span>
         </div>
         <div class="note">${l.slug} · ${(l.tags||[]).map(t=>'#'+t).join(' ')}</div>
+
+        <div id="lib-card-editor-${l.slug}" style="display:none;margin-top:14px"></div>
+
         <div id="lib-editor-${l.slug}" style="display:none;margin-top:14px">
           <div class="note" id="lib-status-${l.slug}"></div>
           <div id="lib-insights-${l.slug}"></div>
@@ -1295,6 +1301,79 @@ ${tcList}
         </div>
       </div>`;
     }).join('');
+  }
+
+  // ── Полноценный редактор карточки лекции (название/описание/теги/темы/ссылки/таймкоды)
+  //    + просмотр транскрипта целиком — чтобы можно было визуально проверить, не
+  //    оборвался ли он раньше конца записи (диагностика при подозрении на усечение) ──
+
+  function timecodesToText(tcs) {
+    return (tcs||[]).map(t => `${t.time} — ${t.label}`).join('\n');
+  }
+
+  function timecodesFromText(text) {
+    return text.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+      const m = /^([\d:]+)\s*[—-]\s*(.+)$/.exec(line);
+      return m ? { time: m[1].trim(), label: m[2].trim() } : { time: '', label: line };
+    });
+  }
+
+  function toggleLibCardEditor(slug) {
+    const el = document.getElementById('lib-card-editor-'+slug);
+    const opening = el.style.display === 'none';
+    if (!opening) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    const l = libraryLectures.find(x => x.slug === slug);
+    el.innerHTML = `
+      <div class="field"><label>Название</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-title-${slug}" value="${(l.title||'').replace(/"/g,'&quot;')}"></div>
+      <div class="field"><label>Описание</label><textarea id="lc-description-${slug}" style="width:100%;min-height:70px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${l.description||''}</textarea></div>
+      <div class="field"><label>Теги (через запятую)</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-tags-${slug}" value="${(l.tags||[]).join(', ')}"></div>
+      <div class="field"><label>Темы (через запятую)</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-topics-${slug}" value="${(l.topics||[]).join(', ')}"></div>
+      <div class="field"><label>Ссылка ТГ</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-link-${slug}" value="${l.link||''}"></div>
+      <div class="field"><label>Ссылка ВК</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-linkvk-${slug}" value="${l.link_vk||''}"></div>
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>Тип</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-type-${slug}" value="${l.type||'lecture'}"></div>
+        <div class="field" style="flex:1"><label>Длительность (мин)</label><input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-duration-${slug}" value="${l.duration_minutes||''}"></div>
+      </div>
+      <div class="field"><label>Таймкоды (по одному на строку: "0:00 — метка")</label><textarea id="lc-timecodes-${slug}" style="width:100%;min-height:90px;font-size:12px;font-family:monospace;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${timecodesToText(l.timecodes)}</textarea></div>
+
+      <div class="field">
+        <label>Транскрипт (только просмотр — ${(l.transcript||'').length} символов). Полезно, чтобы проверить, не обрывается ли запись раньше конца лекции</label>
+        <textarea readonly style="width:100%;min-height:160px;font-size:12px;font-family:monospace;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text-dim)">${l.transcript||'(транскрипта нет)'}</textarea>
+      </div>
+
+      <div class="note" id="lc-status-${slug}"></div>
+      <button class="btn-primary" style="width:100%;margin-top:6px" onclick="saveLibCard('${slug}')">Сохранить карточку</button>
+    `;
+  }
+
+  async function saveLibCard(slug) {
+    const statusEl = document.getElementById('lc-status-'+slug);
+    statusEl.textContent = 'Сохраняю...';
+    const payload = {
+      title: document.getElementById('lc-title-'+slug).value.trim(),
+      description: document.getElementById('lc-description-'+slug).value.trim(),
+      tags: document.getElementById('lc-tags-'+slug).value.split(',').map(s=>s.trim()).filter(Boolean),
+      topics: document.getElementById('lc-topics-'+slug).value.split(',').map(s=>s.trim()).filter(Boolean),
+      link: document.getElementById('lc-link-'+slug).value.trim(),
+      link_vk: document.getElementById('lc-linkvk-'+slug).value.trim(),
+      type: document.getElementById('lc-type-'+slug).value.trim() || 'lecture',
+      duration_minutes: parseInt(document.getElementById('lc-duration-'+slug).value, 10) || null,
+      timecodes: timecodesFromText(document.getElementById('lc-timecodes-'+slug).value),
+    };
+    try {
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const updated = await r.json();
+      const idx = libraryLectures.findIndex(x => x.slug === slug);
+      if (idx >= 0) libraryLectures[idx] = updated;
+      statusEl.textContent = 'Сохранено';
+      renderLibraryList();
+    } catch (e) {
+      statusEl.textContent = 'Ошибка: ' + e.message;
+    }
   }
 
   function toggleLibInsightEditor(slug) {
