@@ -1126,11 +1126,15 @@ ${tcList}
     return [parseInt(m[1], 10), m[2] ? parseInt(m[2], 10) : 0, slug];
   }
 
-  function cmpLessonKeyDesc(a, b) {
+  function cmpLessonKeyAsc(a, b) {
+    // Ровно тот же порядок, что и /streams/{key}/lectures в бэкенде (_lesson_sort_key):
+    // по возрастанию номера занятия, а при равенстве — по самой строке slug. Это же
+    // сравнение само по себе ставит "lecture" раньше "practice", а "practice" раньше
+    // "practice02"/"practice03" — алфавитно, без отдельного правила, ровно как в аппе.
     const ka = lessonSortKey(a.slug), kb = lessonSortKey(b.slug);
-    if (ka[0] !== kb[0]) return kb[0] - ka[0];
-    if (ka[1] !== kb[1]) return kb[1] - ka[1];
-    return ka[2] < kb[2] ? 1 : -1;
+    if (ka[0] !== kb[0]) return ka[0] - kb[0];
+    if (ka[1] !== kb[1]) return ka[1] - kb[1];
+    return ka[2] < kb[2] ? -1 : 1;
   }
 
   let streamsList = []; // кэш GET /streams — для обложек
@@ -1269,7 +1273,7 @@ ${tcList}
   function renderLibraryList() {
     const el = document.getElementById('lib-list');
     let rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
-    if (libActiveStream !== 'all') rows = [...rows].sort(cmpLessonKeyDesc); // внутри потока — от новых занятий к старым
+    if (libActiveStream !== 'all') rows = [...rows].sort(cmpLessonKeyAsc); // внутри потока — по возрастанию, как и в аппе
     const coverHtml = libActiveStream !== 'all' ? streamCoverCardHtml(libActiveStream) : '';
     if (!rows.length) { el.innerHTML = coverHtml + '<div class="empty-dict">Ничего не найдено</div>'; return; }
     el.innerHTML = coverHtml + rows.map(l => {
