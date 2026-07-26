@@ -37,6 +37,7 @@
   --green:#3ecf8e; --red:#ff453a;
   --disp:'Unbounded',sans-serif; --body:'Manrope',sans-serif;
   --shadow:0 4px 20px -6px rgba(124,108,240,0.15);
+  --safe-top: env(safe-area-inset-top); /* JS переопределит на реальный safeAreaInset+contentSafeAreaInset Telegram, если доступно */
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg);transition:background .3s}
@@ -56,7 +57,7 @@ body{
 .blob-3{width:200px;height:200px;top:40%;right:-60px;background:var(--mint);opacity:var(--blob2-op)}
 .shell{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 16px}
 
-header{padding:calc(env(safe-area-inset-top)+16px) 0 20px;display:flex;align-items:center;justify-content:space-between}
+header{padding:calc(var(--safe-top) + 14px) 0 20px;display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;align-items:center;gap:10px}
 .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--lav),var(--coral));display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:900;font-size:13px;color:white;box-shadow:0 6px 16px -4px rgba(155,140,242,0.45)}
 .brand-name{font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:-.01em}
@@ -511,6 +512,24 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
   let currentTranscript = '';
   let currentTimecodes = [];
   let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
+
+  // env(safe-area-inset-top) сам по себе не всегда срабатывает внутри Telegram —
+  // тот же фикс, что и в club-app: JS переопределяет --safe-top на реальное значение,
+  // если страница открыта внутри Telegram.WebApp
+  function applyTelegramSafeArea(){
+    const tg = window.Telegram?.WebApp;
+    if (!tg) return;
+    const deviceTop = tg.safeAreaInset?.top || 0;
+    const contentTop = tg.contentSafeAreaInset?.top || 0;
+    const total = deviceTop + contentTop;
+    if (total > 0) {
+      document.documentElement.style.setProperty('--safe-top', total + 'px');
+    }
+  }
+  applyTelegramSafeArea();
+  if (window.Telegram?.WebApp) {
+    window.Telegram.WebApp.onEvent?.('contentSafeAreaChanged', applyTelegramSafeArea);
+  }
 
   let libraryLoaded = false;
   let libraryLectures = [];
