@@ -1139,18 +1139,18 @@ ${tcList}
   async function handleCoverUpload(key, file) {
     if (!file) return;
     const statusEl = document.getElementById('cover-status-'+key);
-    statusEl.textContent = 'Загружаю и сжимаю...';
+    statusEl.textContent = 'Сжимаю и коммичу в GitHub...';
     try {
       const dataUrl = await resizeImageToDataUrl(file, 800);
-      const exists = findStream(key);
-      const url = exists ? `${API_URL}/streams/${key}` : `${API_URL}/streams`;
-      const method = exists ? 'PUT' : 'POST';
-      const body = exists ? { image_url: dataUrl } : { stream_key: key, title: key, image_url: dataUrl };
-      const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      const r = await fetch(`${API_URL}/admin/upload-stream-cover?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream_key: key, image_base64: dataUrl, ext: 'jpg' }),
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      if (exists) { exists.image_url = dataUrl; } else { streamsList.push({ stream_key: key, title: key, description: '', image_url: dataUrl }); }
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      const exists = findStream(key);
+      if (exists) { exists.image_url = d.url; } else { streamsList.push({ stream_key: key, title: key, description: '', image_url: d.url }); }
       renderLibraryList();
       statusEl.textContent = '';
     } catch (e) {
