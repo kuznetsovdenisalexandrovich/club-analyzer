@@ -824,11 +824,13 @@ ${tcList}
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 8000, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 6000, messages: [{ role: 'user', content: prompt }] })
     });
     if (!r.ok) {
       const e = await r.json().catch(()=>({}));
-      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
+      const msg = e.error?.message || r.statusText;
+      const hint = r.status === 429 ? ' — подожди минуту (лимит токенов в минуту сбрасывается раз в 60 секунд) и попробуй ещё раз' : '';
+      throw new Error('GPT-4o: ' + msg + hint);
     }
     const data = await r.json();
     const raw = data.choices[0].message.content;
