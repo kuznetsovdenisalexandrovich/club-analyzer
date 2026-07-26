@@ -1044,13 +1044,34 @@ ${tcList}
     return m ? m[1] : 'без потока';
   }
 
+  // Тот же regex и порядок разбора, что и в бэкенде (_lesson_sort_key в main.py) —
+  // major/minor номер занятия из slug, чтобы сортировка тут не разъезжалась с аппом
+  function lessonSortKey(slug) {
+    const m = /_l(\d+)(?:\.(\d+))?_/.exec(slug || '');
+    if (!m) return [999, 0, slug];
+    return [parseInt(m[1], 10), m[2] ? parseInt(m[2], 10) : 0, slug];
+  }
+
+  function cmpLessonKeyDesc(a, b) {
+    const ka = lessonSortKey(a.slug), kb = lessonSortKey(b.slug);
+    if (ka[0] !== kb[0]) return kb[0] - ka[0];
+    if (ka[1] !== kb[1]) return kb[1] - ka[1];
+    return ka[2] < kb[2] ? 1 : -1;
+  }
+
+  let streamsList = []; // кэш GET /streams — для обложек
+
   async function loadLibraryFromDB() {
     const statusEl = document.getElementById('lib-status');
     statusEl.textContent = 'Загружаю...';
     try {
-      const r = await fetch(`${API_URL}/lectures?limit=500`);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      libraryLectures = await r.json();
+      const [lecRes, streamRes] = await Promise.all([
+        fetch(`${API_URL}/lectures?limit=500`),
+        fetch(`${API_URL}/streams`),
+      ]);
+      if (!lecRes.ok) throw new Error('HTTP ' + lecRes.status);
+      libraryLectures = await lecRes.json();
+      streamsList = streamRes.ok ? await streamRes.json() : [];
       libraryLoaded = true;
       statusEl.textContent = `Загружено ${libraryLectures.length} лекций`;
       renderStreamTabs();
@@ -1065,11 +1086,12 @@ ${tcList}
     const el = document.getElementById('lib-stream-tabs');
     const streams = [...new Set(libraryLectures.map(l => streamPrefixOf(l.slug)))].sort();
     if (!streams.length) { el.style.display = 'none'; return; }
-    el.style.display = 'flex';
-    const chip = (key, label) => `<span class="tag" style="cursor:pointer;${libActiveStream===key?'background:var(--lav-dim);color:var(--lav-deep);border-color:transparent':''}" onclick="filterLibraryByStream('${key}')">${label}</span>`;
-    el.innerHTML = chip('all', `Все (${libraryLectures.length})`) + streams.map(s => {
+    el.className = 'tabs';
+    el.style.cssText = 'display:flex;margin-top:12px';
+    const tabHtml = (key, label) => `<div class="tab${libActiveStream===key?' active':''}" onclick="filterLibraryByStream('${key}')">${label}</div>`;
+    el.innerHTML = tabHtml('all', `Все (${libraryLectures.length})`) + streams.map(s => {
       const count = libraryLectures.filter(l => streamPrefixOf(l.slug)===s).length;
-      return chip(s, `${s} (${count})`);
+      return tabHtml(s, `${s} (${count})`);
     }).join('');
   }
 
@@ -1079,11 +1101,70 @@ ${tcList}
     renderLibraryList();
   }
 
+  // ── Обложка потока: грузится файлом прямо тут (base64 в базу), без ручного git push ──
+
+  function findStream(key) { return streamsList.find(s => s.stream_key === key); }
+
+  function streamCoverCardHtml(key) {
+    const s = findStream(key);
+    const cover = s && s.image_url;
+    return `<div class="card">
+      <div class="card-title">Обложка потока «${key}»</div>
+      ${cover
+        ? `<img src="${cover}" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">`
+        : `<div class="upload-zone" style="padding:20px"><div class="upload-label">Обложки пока нет</div></div>`}
+      <input type="file" accept="image/*" style="display:none" id="cover-input-${key}" onchange="handleCoverUpload('${key}', this.files[0])">
+      <button class="btn btn-sm" onclick="document.getElementById('cover-input-${key}').click()">${cover ? 'Редактировать обложку' : 'Загрузить обложку'}</button>
+      <div class="note" id="cover-status-${key}"></div>
+    </div>`;
+  }
+
+  function resizeImageToDataUrl(file, maxWidth) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = () => { img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      }; img.onerror = reject; img.src = reader.result; };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleCoverUpload(key, file) {
+    if (!file) return;
+    const statusEl = document.getElementById('cover-status-'+key);
+    statusEl.textContent = 'Загружаю и сжимаю...';
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 800);
+      const exists = findStream(key);
+      const url = exists ? `${API_URL}/streams/${key}` : `${API_URL}/streams`;
+      const method = exists ? 'PUT' : 'POST';
+      const body = exists ? { image_url: dataUrl } : { stream_key: key, title: key, image_url: dataUrl };
+      const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (exists) { exists.image_url = dataUrl; } else { streamsList.push({ stream_key: key, title: key, description: '', image_url: dataUrl }); }
+      renderLibraryList();
+      statusEl.textContent = '';
+    } catch (e) {
+      statusEl.textContent = 'Ошибка: ' + e.message;
+    }
+  }
+
   function renderLibraryList() {
     const el = document.getElementById('lib-list');
-    const rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
-    if (!rows.length) { el.innerHTML = '<div class="empty-dict">Ничего не найдено</div>'; return; }
-    el.innerHTML = rows.map(l => {
+    let rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
+    if (libActiveStream !== 'all') rows = [...rows].sort(cmpLessonKeyDesc); // внутри потока — от новых занятий к старым
+    const coverHtml = libActiveStream !== 'all' ? streamCoverCardHtml(libActiveStream) : '';
+    if (!rows.length) { el.innerHTML = coverHtml + '<div class="empty-dict">Ничего не найдено</div>'; return; }
+    el.innerHTML = coverHtml + rows.map(l => {
       const hasInsights = (l.key_insights||[]).length > 0;
       return `<div class="card" id="lib-card-${l.slug}">
         <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
