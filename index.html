@@ -809,10 +809,11 @@ ${tcList}
 
 Для каждой мысли дай:
 - insight: сама мысль, 1-3 предложения, директивно
-- phrase: дословная или близкая к дословной фраза-пример ИЗ ТРАНСКРИПТА, которой Денис это иллюстрирует
+- phrase: пример фразы — ТОЛЬКО если Денис в транскрипте реально даёт готовую формулировку, например явно отвечает на вопрос "как это сказать", говорит "например..." или отвечает конкретным примером на вопрос участника. Возьми её дословно или близко к дословному из транскрипта.
+  Денис НЕ всегда даёт пример — часто он просто рассуждает о жизни или рассказывает анекдотичную концепцию без готовой фразы-скрипта. В этом случае НЕ ВЫДУМЫВАЙ пример — оставь phrase пустой строкой "".
 - timecode: выбери БЛИЖАЙШИЙ подходящий таймкод из списка выше (просто скопируй его time, ничего не выдумывай)
 
-Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"...","timecode":"0:00"}]}`;
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"","timecode":"0:00"}]}`;
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -830,43 +831,75 @@ ${tcList}
     return parsed.insights || [];
   }
 
-  function insightRowHtml(ins, idx) {
-    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:8px" data-idx="${idx}">
-      <div style="display:flex;gap:8px;align-items:center">
-        <span class="tc-time" style="cursor:text" contenteditable="true" data-field="timecode">${ins.timecode||'0:00'}</span>
-        <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить</button>
+  function phraseBlockHtml(phrase, autoFound) {
+    const label = autoFound ? 'Автоматически найденный пример' : 'Пример фразы';
+    return `<div class="phrase-block">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
+        <span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em">${label}</span>
+        <button class="export-btn" style="color:var(--red)" onclick="removeExampleFromRow(this)">Убрать пример</button>
       </div>
-      <textarea class="insight-field" data-field="insight" style="width:100%;min-height:50px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.insight||''}</textarea>
-      <div style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Пример фразы</div>
-      <textarea class="insight-field" data-field="phrase" style="width:100%;min-height:40px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.phrase||''}</textarea>
+      <textarea class="insight-field" data-field="phrase" style="width:100%;min-height:40px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${phrase||''}</textarea>
     </div>`;
   }
 
-  function renderInsightsList(containerId, insights) {
+  function noPhraseBlockHtml() {
+    return `<button class="export-btn" onclick="addExampleToRow(this)">+ Добавить пример фразы</button>`;
+  }
+
+  function insightRowHtml(ins, idx, justGenerated) {
+    const hasPhrase = !!(ins.phrase && ins.phrase.trim());
+    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:8px" data-idx="${idx}">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="tc-time" style="cursor:text" contenteditable="true" data-field="timecode">${ins.timecode||'0:00'}</span>
+        <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить мысль</button>
+      </div>
+      <textarea class="insight-field" data-field="insight" style="width:100%;min-height:50px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.insight||''}</textarea>
+      <div class="phrase-slot">${hasPhrase ? phraseBlockHtml(ins.phrase, justGenerated) : noPhraseBlockHtml()}</div>
+    </div>`;
+  }
+
+  // Убрать пример — не просто стереть текст, а вообще снять факт наличия примера у этой
+  // мысли (иначе в карточке выжимки останется пустой раскрывающийся блок "Пример фразы >")
+  function removeExampleFromRow(btn) {
+    const slot = btn.closest('.phrase-slot');
+    slot.innerHTML = noPhraseBlockHtml();
+  }
+
+  function addExampleToRow(btn) {
+    const slot = btn.closest('.phrase-slot');
+    slot.innerHTML = phraseBlockHtml('', false);
+    slot.querySelector('textarea').focus();
+  }
+
+  function renderInsightsList(containerId, insights, justGenerated) {
     const el = document.getElementById(containerId);
     if (!insights || !insights.length) {
       el.innerHTML = '<div style="color:var(--text-faint);font-size:13px">Выжимки ещё нет — нажми "Сгенерировать выжимку"</div>';
       return;
     }
-    el.innerHTML = '<div class="tc-list">' + insights.map(insightRowHtml).join('') + '</div>';
+    el.innerHTML = '<div class="tc-list">' + insights.map((ins, i) => insightRowHtml(ins, i, justGenerated)).join('') + '</div>';
   }
 
   function addInsightRow(containerId) {
     const el = document.getElementById(containerId);
+    const html = insightRowHtml({}, Date.now(), false);
     if (el.querySelector('.tc-list')) {
-      el.querySelector('.tc-list').insertAdjacentHTML('beforeend', insightRowHtml({}, Date.now()));
+      el.querySelector('.tc-list').insertAdjacentHTML('beforeend', html);
     } else {
-      el.innerHTML = '<div class="tc-list">' + insightRowHtml({}, Date.now()) + '</div>';
+      el.innerHTML = '<div class="tc-list">' + html + '</div>';
     }
   }
 
   function collectInsights(containerId) {
     const el = document.getElementById(containerId);
-    return Array.from(el.querySelectorAll('.tc-item')).map(row => ({
-      timecode: row.querySelector('[data-field="timecode"]').textContent.trim(),
-      insight:  row.querySelector('[data-field="insight"]').value.trim(),
-      phrase:   row.querySelector('[data-field="phrase"]').value.trim(),
-    })).filter(i => i.insight);
+    return Array.from(el.querySelectorAll('.tc-item')).map(row => {
+      const phraseField = row.querySelector('[data-field="phrase"]');
+      return {
+        timecode: row.querySelector('[data-field="timecode"]').textContent.trim(),
+        insight:  row.querySelector('[data-field="insight"]').value.trim(),
+        phrase:   phraseField ? phraseField.value.trim() : '', // блока нет — значит для этой мысли примера нет, и это осознанный выбор
+      };
+    }).filter(i => i.insight);
   }
 
   async function generateInsightsForCurrent() {
@@ -878,7 +911,7 @@ ${tcList}
     try {
       const insights = await extractKeyInsights(key, currentTranscript, currentTimecodes, currentResult.title);
       currentResult.key_insights = insights;
-      renderInsightsList('current-insights-list', insights);
+      renderInsightsList('current-insights-list', insights, true);
       addToDict(); // обновляем запись в словаре с новой выжимкой
       statusEl.textContent = `Готово — ${insights.length} мыслей. Отредактируй при желании и сохрани через "Загрузить в базу".`;
     } catch (e) {
@@ -1280,7 +1313,7 @@ ${tcList}
     try {
       const insights = await extractKeyInsights(key, lec.transcript, lec.timecodes, lec.title);
       lec.key_insights = insights;
-      renderInsightsList('lib-insights-'+slug, insights);
+      renderInsightsList('lib-insights-'+slug, insights, true);
       statusEl.textContent = `Готово — ${insights.length} мыслей. Проверь и сохрани.`;
     } catch (e) {
       statusEl.textContent = '';
@@ -1332,10 +1365,12 @@ ${tcList}
     const html = picked.map(slug => {
       const l = libraryLectures.find(x => x.slug === slug);
       if (!l) return '';
-      const insightsHtml = (l.key_insights||[]).map(ins => `
+      const insightsHtml = (l.key_insights||[]).map(ins => {
+        const hasPhrase = ins.phrase && ins.phrase.trim();
+        return `
         <p><b>${ins.insight}</b></p>
-        <details style="margin:4px 0 12px"><summary style="cursor:pointer;color:var(--lav-deep);font-size:12px">Пример фразы ›</summary><p style="font-style:italic;margin-top:6px">${ins.phrase||''}</p></details>`
-      ).join('');
+        ${hasPhrase ? `<details style="margin:4px 0 12px"><summary style="cursor:pointer;color:var(--lav-deep);font-size:12px">Пример фразы ›</summary><p style="font-style:italic;margin-top:6px">${ins.phrase}</p></details>` : ''}`;
+      }).join('');
       const link = l.link || l.link_vk || '';
       return `<h3>${l.title}</h3>${insightsHtml}${link ? `<p><a href="${link}">Смотреть лекцию →</a></p>` : ''}<hr style="margin:16px 0;border:none;border-top:1px solid var(--line)">`;
     }).join('');
