@@ -1876,6 +1876,19 @@ ${tcList}
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
+  /* Строка как аргумент внутри onclick="..." — атрибут в ДВОЙНЫХ кавычках,
+     поэтому JS-строку берём в ОДИНАРНЫЕ. JSON.stringify тут не годится: она
+     возвращает строку в двойных кавычках, и атрибут обрывается на первой же
+     (`onclick="fn("clients")"`) — ровно на этом сломались все кнопки вкладки */
+  function jsArg(s){
+    return "'" + String(s == null ? '' : s)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;') + "'";
+  }
+
   // Активные проблемы — то, чем реально размечают. Предложенные и архивные
   // в разметке не участвуют, иначе мусор расползётся по лекциям
   function activeProblems(){
@@ -1960,12 +1973,12 @@ ${tcList}
           + '<div style="font-size:13px;font-weight:600">' + prEsc(p.label) + '</div>'
           + '<div class="note">' + prEsc(p.key) + (p.description ? ' · ' + prEsc(p.description) : '') + '</div>'
           + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
-            + '<button class="btn btn-sm" onclick="acceptProblem(' + JSON.stringify(p.key) + ')">Принять</button>'
+            + '<button class="btn btn-sm" onclick="acceptProblem(' + jsArg(p.key) + ')">Принять</button>'
             + (active.length
                 ? '<select id="pr-merge-' + prEsc(p.key) + '" class="btn btn-sm" style="cursor:pointer">' + options + '</select>'
-                  + '<button class="btn btn-sm" onclick="mergeProblem(' + JSON.stringify(p.key) + ')">Склеить с выбранной</button>'
+                  + '<button class="btn btn-sm" onclick="mergeProblem(' + jsArg(p.key) + ')">Склеить с выбранной</button>'
                 : '')
-            + '<button class="btn btn-sm" onclick="archiveProblem(' + JSON.stringify(p.key) + ')">В архив</button>'
+            + '<button class="btn btn-sm" onclick="archiveProblem(' + jsArg(p.key) + ')">В архив</button>'
           + '</div></div>';
       }).join('');
     }
@@ -1993,7 +2006,7 @@ ${tcList}
               + (empty ? ' — <b>нет ни одной лекции</b>' : '')
               + (kids.length ? ' · частных случаев: ' + kids.length : '') + '</div>'
           + '</div>'
-          + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + JSON.stringify(p.key) + ')">Править</button>'
+          + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + jsArg(p.key) + ')">Править</button>'
         + '</div>'
         + '<div id="pr-editor-' + prEsc(p.key) + '" style="display:none;margin-top:12px"></div>'
         + '</div>';
@@ -2064,17 +2077,17 @@ ${tcList}
       + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-order-' + prEsc(key) + '" value="' + (p.sort_order||100) + '"></div>'
       + '<div class="note" id="pr-st-' + prEsc(key) + '"></div>'
       + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
-        + '<button class="btn-primary" style="flex:1" onclick="saveProblem(' + JSON.stringify(key) + ')">Сохранить</button>'
+        + '<button class="btn-primary" style="flex:1" onclick="saveProblem(' + jsArg(key) + ')">Сохранить</button>'
         + (p.status === 'archived'
-            ? '<button class="btn btn-sm" onclick="acceptProblem(' + JSON.stringify(key) + ')">Вернуть в работу</button>'
-            : '<button class="btn btn-sm" onclick="archiveProblem(' + JSON.stringify(key) + ')">В архив</button>')
+            ? '<button class="btn btn-sm" onclick="acceptProblem(' + jsArg(key) + ')">Вернуть в работу</button>'
+            : '<button class="btn btn-sm" onclick="archiveProblem(' + jsArg(key) + ')">В архив</button>')
       + '</div>'
       + (active.length
           ? '<div class="note" style="margin-top:12px">Склеить с другой проблемой — разметка лекций переедет на выбранную, эта уйдёт в архив. Обратно не разделить.</div>'
             + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">'
             + '<select id="pr-merge-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;flex:1">'
             + active.map(function(a){ return '<option value="' + prEsc(a.key) + '">' + prEsc(a.label) + '</option>'; }).join('')
-            + '</select><button class="btn btn-sm" onclick="mergeProblem(' + JSON.stringify(key) + ')">Склеить</button></div>'
+            + '</select><button class="btn btn-sm" onclick="mergeProblem(' + jsArg(key) + ')">Склеить</button></div>'
           : '');
   }
 
@@ -2225,7 +2238,7 @@ ${tcList}
         + (isChild ? ';margin-left:18px' : '') + '">'
         + '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;margin:0">'
           + '<input type="checkbox" ' + (on ? 'checked' : '')
-          + ' onchange="toggleProblemPick(this,' + JSON.stringify(prefix) + ')">'
+          + ' onchange="toggleProblemPick(this,' + jsArg(prefix) + ')">'
           + '<span><span class="dev-name">' + (isChild ? '<span style="opacity:.5">↳ </span>' : '') + prEsc(p.label) + '</span>'
           + (p.description ? '<span class="dev-hint">' + prEsc(p.description) + '</span>' : '')
           + '</span></label>'
@@ -2272,7 +2285,7 @@ ${tcList}
 
     return '<div class="result-block-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
         + '<span>Что решает занятие</span>'
-        + '<button class="export-btn" onclick="suggestProblems(' + JSON.stringify(prefix) + ')">Предложить</button>'
+        + '<button class="export-btn" onclick="suggestProblems(' + jsArg(prefix) + ')">Предложить</button>'
       + '</div>'
       + '<div class="note" style="margin-bottom:8px">Проблемы клиента, которые разбирает это занятие. По ним собирается личный план. Справочник правится на вкладке «Проблемы».</div>'
       + '<div class="note" id="' + prefix + '-problems-status"></div>'
