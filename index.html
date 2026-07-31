@@ -2388,7 +2388,8 @@ ${tcList}
 
     statusEl.textContent = 'Смотрю, что разбирает это занятие...';
     try {
-      const res = await askProblems(key, transcript, title);
+      const out = await markupLecture(key, transcript, title, statusEl);
+      const res = out.res;
       // Новые проблемы, предложенные моделью, заводим со статусом suggested —
       // в разметке они не участвуют, пока Denis их не примет
       if (res.new_problems.length){
@@ -2451,6 +2452,150 @@ ${tcList}
   let bulkRunning = false;
   let bulkStop = false;
 
+  /* ══ Лимит токенов OpenAI ══════════════════════════════════════════════════
+     У организации Denis'а 30 000 токенов/мин на gpt-4o. Транскрипт часовой
+     лекции — это 20 000+ токенов в одном запросе, то есть две подряд идущие
+     лекции гарантированно пробивают минутный потолок.
+
+     Поэтому: считаем расход сами и ждём, пока окно освободится, ДО отправки.
+     Реакция на 429 постфактум не годится — прошлая версия помечала лекцию
+     ошибкой и шла дальше, то есть длинные лекции просто пропускались. */
+
+  let tpmLimit = 30000;          // уточняется из текста ошибки, если он придёт
+  let tpmSpent = [];             // [{ at, tokens }] за последнюю минуту
+
+  // Кириллица в токенизаторе OpenAI идёт дороже латиницы. Три символа на токен —
+  // намеренно осторожная оценка: недосчитать хуже, чем перестраховаться
+  function estimateTokens(text){
+    return Math.ceil(String(text || '').length / 3);
+  }
+
+  function tpmUsedNow(){
+    const cutoff = Date.now() - 60000;
+    tpmSpent = tpmSpent.filter(function(e){ return e.at > cutoff; });
+    return tpmSpent.reduce(function(a, e){ return a + e.tokens; }, 0);
+  }
+
+  // Ждём ровно столько, сколько нужно, чтобы запрос влез в окно
+  async function waitForTokenBudget(need, statusEl){
+    const budget = Math.floor(tpmLimit * 0.9);   // запас: оценка неточная
+    for (;;){
+      const used = tpmUsedNow();
+      if (used + need <= budget) return;
+      const oldest = tpmSpent[0];
+      const waitMs = oldest ? Math.max(1000, oldest.at + 60000 - Date.now() + 500) : 5000;
+      if (statusEl) statusEl.textContent = 'Жду лимит OpenAI — ' + Math.ceil(waitMs/1000) + ' сек...';
+      await new Promise(function(r){ setTimeout(r, waitMs); });
+    }
+  }
+
+  function noteTokensSpent(tokens){
+    tpmSpent.push({ at: Date.now(), tokens: tokens });
+  }
+
+  // OpenAI сам пишет в ошибке и свой лимит, и сколько ждать — используем это
+  // вместо жёсткой минуты: обычно хватает 10-15 секунд
+  function parseRateLimit(message){
+    const out = {};
+    const lim = /Limit\s+(\d+)/i.exec(message || '');
+    if (lim) out.limit = parseInt(lim[1], 10);
+    const wait = /try again in ([\d.]+)\s*(ms|s)/i.exec(message || '');
+    if (wait){
+      const v = parseFloat(wait[1]);
+      out.waitMs = wait[2].toLowerCase() === 'ms' ? v : v * 1000;
+    }
+    return out;
+  }
+
+  /* Транскрипт, который сам по себе не влезает в минутный лимит, не спасёт
+     никакая пауза — такой запрос не пройдёт никогда. Режем на части, спрашиваем
+     по каждой и сводим ответы. Обрезать нельзя: у Denis'а есть трёхчасовые
+     эфиры, и обрезка молча лишила бы их половины разметки. */
+  function splitTranscript(text, maxChars){
+    text = String(text || '');
+    if (text.length <= maxChars) return [text];
+    const parts = [];
+    let pos = 0;
+    while (pos < text.length){
+      let end = Math.min(text.length, pos + maxChars);
+      // Режем по границе предложения, чтобы не рвать фразу пополам.
+      // Следующий кусок ОБЯЗАН начаться ровно там, где кончился этот, — иначе
+      // текст между сдвинутой границей и старой позицией потерялся бы молча
+      if (end < text.length){
+        const dot = text.lastIndexOf('. ', end);
+        if (dot > pos + maxChars * 0.5) end = dot + 1;
+      }
+      parts.push(text.slice(pos, end));
+      pos = end;
+    }
+    return parts;
+  }
+
+  // Сводим ответы по частям одной лекции: проблема попадает в итог один раз,
+  // «в основном про это» побеждает «вскользь», таймкод берём первый непустой
+  function mergeProblemResults(list){
+    const byKey = {}, order = [];
+    const newByKey = {};
+    let level = '', depth = '', vibe = '';
+    list.forEach(function(r){
+      (r.problems || []).forEach(function(p){
+        if (!byKey[p.key]){ byKey[p.key] = { key:p.key, weight:p.weight === 'touch' ? 'touch' : 'main', timecode:p.timecode || '' }; order.push(p.key); return; }
+        const prev = byKey[p.key];
+        if (p.weight !== 'touch') prev.weight = 'main';
+        if (!prev.timecode && p.timecode) prev.timecode = p.timecode;
+      });
+      (r.new_problems || []).forEach(function(np){ if (!newByKey[np.key]) newByKey[np.key] = np; });
+      if (!level && r.level) level = r.level;
+      if (!depth && r.depth) depth = r.depth;
+      if (!vibe && r.vibe) vibe = r.vibe;
+    });
+    return {
+      problems: order.map(function(k){ return byKey[k]; }),
+      new_problems: Object.keys(newByKey).map(function(k){ return newByKey[k]; }),
+      level: level, depth: depth, vibe: vibe,
+    };
+  }
+
+  /* Разметка одной лекции с учётом лимита: ждём окно, при отказе повторяем
+     столько, сколько просит сам OpenAI. Длинные лекции идут частями. */
+  async function markupLecture(apiKey, transcript, title, statusEl){
+    // Промпт со справочником тоже занимает место, оставляем ему запас
+    const maxChars = Math.max(20000, Math.floor(tpmLimit * 0.55) * 3);
+    const parts = splitTranscript(transcript || '', maxChars);
+    const results = [];
+
+    for (let i = 0; i < parts.length; i++){
+      if (parts.length > 1 && statusEl){
+        statusEl.textContent = statusEl.textContent.replace(/ \(часть.*\)$/, '')
+          + ' (часть ' + (i+1) + ' из ' + parts.length + ')';
+      }
+      const need = estimateTokens(parts[i]) + 1500;   // + промпт и ответ
+      let attempt = 0;
+      for (;;){
+        await waitForTokenBudget(need, statusEl);
+        try {
+          const res = await askProblems(apiKey, parts[i], title);
+          noteTokensSpent(need);
+          results.push(res);
+          break;
+        } catch(e){
+          const rl = parseRateLimit(e.message || '');
+          const isRate = /429|rate limit/i.test(e.message || '');
+          if (!isRate || attempt >= 3) throw e;
+          attempt++;
+          if (rl.limit) tpmLimit = rl.limit;           // подстроились под реальный лимит
+          // Раз запрос отвергнут, окно занято чем-то, чего мы не учли —
+          // записываем расход, чтобы следующая попытка не полезла сразу же
+          noteTokensSpent(need);
+          const waitMs = Math.max(2000, (rl.waitMs || 15000) + 1000);
+          if (statusEl) statusEl.textContent = 'Лимит OpenAI, жду ' + Math.ceil(waitMs/1000) + ' сек и пробую снова...';
+          await new Promise(function(r){ setTimeout(r, waitMs); });
+        }
+      }
+    }
+    return { res: mergeProblemResults(results), parts: parts.length };
+  }
+
   async function runBulkMarkup(){
     const btn = document.getElementById('bulk-run-btn');
     const statusEl = document.getElementById('bulk-status');
@@ -2491,7 +2636,8 @@ ${tcList}
       if (bulkStop) break;
       statusEl.textContent = 'Размечаю ' + (done + failed + 1) + ' из ' + queue.length + ': ' + lec.title;
       try {
-        const res = await askProblems(key, lec.transcript, lec.title);
+        const out = await markupLecture(key, lec.transcript, lec.title, statusEl);
+        const res = out.res;
 
         // Новые проблемы копим со статусом suggested — в разметку они не пойдут,
         // пока Denis не примет. Это и не даёт справочнику расползтись
@@ -2524,16 +2670,13 @@ ${tcList}
         const names = (updated.problems || []).map(function(p){
           return problemLabel(p.key) + (p.weight === 'touch' ? ' (вскользь)' : '');
         });
-        bulkLog(lec.title, names.length ? names.join(', ') : 'ничего не подошло', false);
+        bulkLog(lec.title, (names.length ? names.join(', ') : 'ничего не подошло')
+          + (out.parts > 1 ? ' · длинная, разобрана в ' + out.parts + ' частях' : ''), false);
       } catch(e){
         failed++;
+        // Сюда попадаем, только если повторы внутри markupLecture не помогли —
+        // слепой паузы здесь больше нет, она была причиной пропуска лекций
         bulkLog(lec.title, e.message, true);
-        // Лимит токенов — самая частая причина. Ждём и продолжаем, а не падаем:
-        // прерваться на 40-й лекции из 80 обиднее, чем подождать минуту
-        if (/429|rate limit/i.test(e.message || '')){
-          statusEl.textContent = 'Уперлись в лимит OpenAI — жду минуту...';
-          await new Promise(function(r){ setTimeout(r, 60000); });
-        }
       }
     }
 
