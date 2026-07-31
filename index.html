@@ -268,6 +268,7 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
     <div class="mode-tab tab active" onclick="switchMode('new')">Новое видео</div>
     <div class="mode-tab tab" onclick="switchMode('library')">Библиотека</div>
     <div class="mode-tab tab" onclick="switchMode('digests')">Дайджесты</div>
+    <div class="mode-tab tab" onclick="switchMode('problems')">Проблемы</div>
   </div>
 
   <div class="mode-panel active" id="mode-new">
@@ -390,6 +391,7 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
           <div class="result-block-label">Ключевые темы</div>
           <div class="result-content" id="res-topics">—</div>
         </div>
+        <div class="result-block" id="res-problems-block"></div>
         <div class="result-block">
           <div class="result-block-label">
             <span>Что развивает занятие</span>
@@ -505,6 +507,28 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
       <div class="tag-filter-row" id="lib-stream-tabs" style="display:none;flex-wrap:wrap;gap:6px;margin-top:12px"></div>
     </div>
 
+    <div class="card">
+      <div class="card-title"><span class="step-num">3</span> Разметить всё разом</div>
+      <div class="note" style="line-height:1.5">
+        Модель проходит по лекциям и сама расставляет проблемы, уровень, глубину и характер.
+        Дальше просмотришь глазами и поправишь — проверять готовое быстрее, чем заполнять с нуля.<br><br>
+        Так же снимается страх «завёл мало проблем и пожалел»: добавил новую — прогнал заново,
+        модель сама перепроверит всю библиотеку.
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="flex:1;min-width:180px;margin:0">
+          <label>Какие лекции брать</label>
+          <select id="bulk-scope" class="btn btn-sm" style="cursor:pointer;width:100%">
+            <option value="unmarked">Только ещё не размеченные</option>
+            <option value="all">Все — перезаписать разметку заново</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="bulk-run-btn" style="flex:1;min-width:150px" onclick="runBulkMarkup()">Разметить</button>
+      </div>
+      <div class="note" id="bulk-status" style="margin-top:10px"></div>
+      <div id="bulk-log" style="margin-top:8px;max-height:240px;overflow:auto"></div>
+    </div>
+
     <div id="lib-list"></div>
   </div>
 
@@ -545,6 +569,57 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
         <button class="btn btn-sm" onclick="loadDigestsList()">Обновить</button>
       </div>
       <div id="digests-list"><div class="empty-dict">Ещё не загружено</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ Проблемы: справочник, по которому размечаются лекции и спрашивается человек ═══ -->
+  <div class="mode-panel" id="mode-problems" style="display:none">
+    <div class="card">
+      <div class="card-title"><span class="step-num">?</span> Зачем это</div>
+      <div class="note" style="line-height:1.5">
+        Список того, с чем человек приходит: «где брать клиентов», «как напоминать о себе».
+        Одним и тем же списком размечаются лекции и спрашивается участник — на совпадении
+        этих двух сторон и собирается личный план.<br><br>
+        Список не обязательно придумывать заранее: размечай лекции, а модель будет
+        предлагать недостающее. Предложенное копится ниже — принимаешь или склеиваешь
+        с похожим.<br><br>
+        <b>Ключ не меняется после создания</b> — на нём висит разметка лекций. Название
+        меняй сколько угодно. Сомневаешься, дробить или объединять — <b>дроби</b>: склеить
+        две проблемы потом можно одной кнопкой, разделить одну на две — нельзя.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">1</span> Добавить проблему</span>
+        <button class="btn btn-sm" onclick="loadProblemsAdmin()">Обновить</button>
+      </div>
+      <div class="field">
+        <label>Ключ (латиница, без пробелов — например clients, remind, scale)</label>
+        <input type="text" id="pr-new-key" placeholder="clients" />
+      </div>
+      <div class="field">
+        <label>Название — словами клиента, не профессиональными</label>
+        <input type="text" id="pr-new-label" placeholder="Где брать клиентов" />
+      </div>
+      <div class="field">
+        <label>Чем отличается от соседних (это читает модель при разметке)</label>
+        <textarea id="pr-new-desc" class="tc-input" rows="2" placeholder="Про поиск НОВЫХ клиентов и источники трафика. Не про то, как продать уже пришедшему — это отдельная проблема"></textarea>
+      </div>
+      <div class="note" id="pr-new-status"></div>
+      <button class="btn-primary" style="width:100%;margin-top:6px" onclick="createProblem()">Добавить</button>
+    </div>
+
+    <div class="card" id="pr-suggested-card" style="display:none">
+      <div class="card-title"><span class="step-num">!</span> Предложено моделью</div>
+      <div class="note" style="margin-bottom:10px">Модель встретила это при разметке и не нашла подходящего пункта. Прими, если это правда новая проблема, или склей с существующей.</div>
+      <div id="pr-suggested-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="step-num">2</span> Справочник</div>
+      <div class="note" id="pr-status">Загружаю...</div>
+      <div id="pr-list" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -791,6 +866,19 @@ ${slugInstruction}
     const noteEl = document.getElementById('develops-note');
     if (noteEl) noteEl.value = card.develops_note || '';
 
+    // Справочник проблем нужен до отрисовки блока — грузим, если ещё не грузили,
+    // и перерисовываем, когда приедет
+    const prBlock = document.getElementById('res-problems-block');
+    if (prBlock){
+      prBlock.innerHTML = problemsBlockHtml('res', card);
+      ensureProblemsLoaded().then(function(){
+        prBlock.innerHTML = problemsBlockHtml('res', {
+          problems: card.problems || [], level: card.level || '',
+          depth: card.depth || '', vibe: card.vibe || '',
+        });
+      });
+    }
+
     const tagsEl = document.getElementById('res-tags');
     tagsEl.innerHTML = '';
     (card.tags||[]).forEach(t => {
@@ -962,16 +1050,19 @@ ${tcList}
     document.querySelectorAll('#result-wrap .tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
   }
 
+  const MODES = ['new','library','digests','problems'];
+
   function switchMode(name){
-    ['new','library','digests'].forEach(m => {
+    MODES.forEach(m => {
       document.getElementById('mode-'+m).style.display = (m===name) ? 'block' : 'none';
     });
     document.querySelectorAll('.mode-tab').forEach((t,i) => {
-      t.classList.toggle('active', ['new','library','digests'][i]===name);
+      t.classList.toggle('active', MODES[i]===name);
     });
     if (name === 'library' && !libraryLoaded) loadLibraryFromDB();
     if (name === 'digests' && !libraryLoaded) loadLibraryFromDB();
     if (name === 'digests') loadDigestsList();
+    if (name === 'problems') loadProblemsAdmin();
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
@@ -1084,6 +1175,10 @@ ${tcList}
       transcript: entry.transcript || '',
       develops: entry.develops || [],
       develops_note: entry.develops_note || '',
+      problems: entry.problems || [],
+      level: entry.level || '',
+      depth: entry.depth || '',
+      vibe: entry.vibe || '',
     };
     const exists = await lectureExists(entry.slug);
     const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
@@ -1107,6 +1202,7 @@ ${tcList}
     // иначе правки последней минуты просто не доедут
     currentResult.develops = collectDevelops();
     currentResult.develops_note = developsNote();
+    syncProblemsToResult('res');
     addToDict();
     const entry = dictionary.find(d => d.slug === currentResult.slug) || currentResult;
     try {
@@ -1194,6 +1290,8 @@ ${tcList}
       libraryLectures = await lecRes.json();
       streamsList = streamRes.ok ? await streamRes.json() : [];
       libraryLoaded = true;
+      // Без справочника в списке лекций вместо названий проблем были бы голые ключи
+      await ensureProblemsLoaded();
       statusEl.textContent = `Загружено ${libraryLectures.length} лекций`;
       renderStreamTabs();
       renderLibraryList();
@@ -1321,6 +1419,14 @@ ${tcList}
     if (!rows.length) { el.innerHTML = coverHtml + '<div class="empty-dict">Ничего не найдено</div>'; return; }
     el.innerHTML = coverHtml + rows.map(l => {
       const hasInsights = (l.key_insights||[]).length > 0;
+      // Строка разметки прямо в списке: сразу видно, что уже сделано, а что нет —
+      // без неё в длинной библиотеке непонятно, где остановился
+      const marked = (l.problems || []).map(p =>
+        prEsc(problemLabel(p.key)) + (p.weight === 'touch' ? ' <span style="opacity:.6">(вскользь)</span>' : '')
+      ).join(', ');
+      const markLine = marked
+        ? `<div class="note" style="margin-top:2px">🎯 ${marked}</div>`
+        : `<div class="note" style="margin-top:2px;opacity:.6">не размечено</div>`;
       return `<div class="card" id="lib-card-${l.slug}">
         <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;gap:8px">
           <span style="font-size:13px">${l.title}</span>
@@ -1330,6 +1436,7 @@ ${tcList}
           </span>
         </div>
         <div class="note">${l.slug} · ${(l.tags||[]).map(t=>'#'+t).join(' ')}</div>
+        ${markLine}
 
         <div id="lib-card-editor-${l.slug}" style="display:none;margin-top:14px"></div>
 
@@ -1380,6 +1487,8 @@ ${tcList}
       </div>
       <div class="field"><label>Таймкоды (по одному на строку: "0:00 — метка")</label><textarea id="lc-timecodes-${slug}" style="width:100%;min-height:90px;font-size:12px;font-family:monospace;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${timecodesToText(l.timecodes)}</textarea></div>
 
+      <div class="result-block" id="lib-${slug}-problems-block"></div>
+
       <div class="field">
         <label>Транскрипт (только просмотр — ${(l.transcript||'').length} символов). Полезно, чтобы проверить, не обрывается ли запись раньше конца лекции</label>
         <textarea readonly style="width:100%;min-height:160px;font-size:12px;font-family:monospace;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text-dim)">${l.transcript||'(транскрипта нет)'}</textarea>
@@ -1388,6 +1497,15 @@ ${tcList}
       <div class="note" id="lc-status-${slug}"></div>
       <button class="btn-primary" style="width:100%;margin-top:6px" onclick="saveLibCard('${slug}')">Сохранить карточку</button>
     `;
+
+    // Блок разметки рисуем после вставки разметки редактора — ему нужен
+    // справочник проблем, который мог ещё не загрузиться
+    const prBlock = document.getElementById('lib-' + slug + '-problems-block');
+    if (prBlock){
+      const draw = function(){ prBlock.innerHTML = problemsBlockHtml('lib-' + slug, l); };
+      draw();
+      ensureProblemsLoaded().then(draw);
+    }
   }
 
   async function saveLibCard(slug) {
@@ -1403,6 +1521,7 @@ ${tcList}
       type: document.getElementById('lc-type-'+slug).value.trim() || 'lecture',
       duration_minutes: parseInt(document.getElementById('lc-duration-'+slug).value, 10) || null,
       timecodes: timecodesFromText(document.getElementById('lc-timecodes-'+slug).value),
+      ...markupPayload('lib-' + slug),
     };
     try {
       const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
@@ -1708,6 +1827,648 @@ ${tcList}
       statusEl.textContent = '';
       alert(e.message);
     }
+  }
+
+  /* ══ Справочник проблем ══════════════════════════════════════════════════
+     Список того, с чем приходит клиент. Одним справочником размечаются лекции
+     и спрашивается человек — на совпадении собирается личный план. Живёт в базе
+     (в отличие от восьми осей DEVELOPS выше, захардкоженных): растёт вместе
+     с контентом, и модель может предлагать новые пункты прямо при разметке. */
+
+  let problemsAll = [];   // весь справочник, включая предложенные и архивные
+
+  function prEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  // Активные проблемы — то, чем реально размечают. Предложенные и архивные
+  // в разметке не участвуют, иначе мусор расползётся по лекциям
+  function activeProblems(){
+    return problemsAll.filter(function(p){ return p.status === 'active'; });
+  }
+
+  function problemLabel(key){
+    const p = problemsAll.find(function(x){ return x.key === key; });
+    return p ? p.label : key;
+  }
+
+  async function loadProblemsAdmin(){
+    const statusEl = document.getElementById('pr-status');
+    if (statusEl) statusEl.textContent = 'Загружаю...';
+    try {
+      const r = await fetch(`${API_URL}/problems/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      if (!r.ok) throw new Error('сервер ответил ' + r.status);
+      problemsAll = await r.json();
+      renderProblems();
+    } catch(e){
+      if (statusEl) statusEl.textContent = 'Не удалось загрузить: ' + e.message;
+    }
+  }
+
+  // Тихая загрузка — нужна вкладке «Библиотека» и разметке одного видео,
+  // там свой статус-текст и своя отрисовка
+  async function ensureProblemsLoaded(){
+    if (problemsAll.length) return;
+    try {
+      const r = await fetch(`${API_URL}/problems/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      if (r.ok) problemsAll = await r.json();
+    } catch(e){}
+  }
+
+  function renderProblems(){
+    const listEl = document.getElementById('pr-list');
+    const statusEl = document.getElementById('pr-status');
+    const sugCard = document.getElementById('pr-suggested-card');
+    const sugList = document.getElementById('pr-suggested-list');
+    if (!listEl) return;
+
+    const active = problemsAll.filter(function(p){ return p.status === 'active'; });
+    const suggested = problemsAll.filter(function(p){ return p.status === 'suggested'; });
+    const archived = problemsAll.filter(function(p){ return p.status === 'archived'; });
+
+    if (statusEl){
+      statusEl.textContent = problemsAll.length
+        ? active.length + ' рабочих' + (archived.length ? ', ' + archived.length + ' в архиве' : '')
+        : 'Справочник пуст — добавь первую проблему выше или размечай лекции, модель предложит сама';
+    }
+
+    // Очередь предложенного моделью
+    if (sugCard && sugList){
+      sugCard.style.display = suggested.length ? 'block' : 'none';
+      sugList.innerHTML = suggested.map(function(p){
+        const options = active.map(function(a){
+          return '<option value="' + prEsc(a.key) + '">' + prEsc(a.label) + '</option>';
+        }).join('');
+        return '<div class="card" style="margin-bottom:10px">'
+          + '<div style="font-size:13px;font-weight:600">' + prEsc(p.label) + '</div>'
+          + '<div class="note">' + prEsc(p.key) + (p.description ? ' · ' + prEsc(p.description) : '') + '</div>'
+          + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
+            + '<button class="btn btn-sm" onclick="acceptProblem(' + JSON.stringify(p.key) + ')">Принять</button>'
+            + (active.length
+                ? '<select id="pr-merge-' + prEsc(p.key) + '" class="btn btn-sm" style="cursor:pointer">' + options + '</select>'
+                  + '<button class="btn btn-sm" onclick="mergeProblem(' + JSON.stringify(p.key) + ')">Склеить с выбранной</button>'
+                : '')
+            + '<button class="btn btn-sm" onclick="archiveProblem(' + JSON.stringify(p.key) + ')">В архив</button>'
+          + '</div></div>';
+      }).join('');
+    }
+
+    // Сам справочник
+    const rows = active.concat(archived);
+    if (!rows.length){ listEl.innerHTML = '<div class="empty-dict">Пока пусто</div>'; return; }
+    listEl.innerHTML = rows.map(function(p){
+      const isArchived = p.status === 'archived';
+      // Проблема без единой лекции — человек её выберет, а показать будет нечего.
+      // Это не ошибка, а сигнал: сюда нужен контент
+      const empty = !isArchived && !p.lectures_main && !p.lectures_touch;
+      return '<div class="card" style="margin-bottom:10px' + (isArchived ? ';opacity:.55' : '') + '">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+          + '<div style="flex:1">'
+            + '<div style="font-size:13px;font-weight:600">' + prEsc(p.label)
+              + (isArchived ? ' <span class="note" style="font-weight:400">· в архиве</span>' : '') + '</div>'
+            + '<div class="note">' + prEsc(p.key) + ' · основных ' + (p.lectures_main||0)
+              + ', вскользь ' + (p.lectures_touch||0)
+              + (empty ? ' — <b>нет ни одной лекции</b>' : '') + '</div>'
+          + '</div>'
+          + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + JSON.stringify(p.key) + ')">Править</button>'
+        + '</div>'
+        + '<div id="pr-editor-' + prEsc(p.key) + '" style="display:none;margin-top:12px"></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function toggleProblemEditor(key){
+    const el = document.getElementById('pr-editor-' + key);
+    if (!el) return;
+    if (el.style.display !== 'none'){ el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    const p = problemsAll.find(function(x){ return x.key === key; });
+    if (!p) return;
+    const active = activeProblems().filter(function(a){ return a.key !== key; });
+    el.innerHTML =
+        '<div class="field"><label>Название</label>'
+      + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-label-' + prEsc(key) + '" value="' + prEsc(p.label) + '"></div>'
+      + '<div class="field"><label>Чем отличается от соседних (читает модель)</label>'
+      + '<textarea id="pr-desc-' + prEsc(key) + '" class="tc-input" rows="2">' + prEsc(p.description) + '</textarea></div>'
+      + '<div class="field"><label>Порядок в списке</label>'
+      + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-order-' + prEsc(key) + '" value="' + (p.sort_order||100) + '"></div>'
+      + '<div class="note" id="pr-st-' + prEsc(key) + '"></div>'
+      + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
+        + '<button class="btn-primary" style="flex:1" onclick="saveProblem(' + JSON.stringify(key) + ')">Сохранить</button>'
+        + (p.status === 'archived'
+            ? '<button class="btn btn-sm" onclick="acceptProblem(' + JSON.stringify(key) + ')">Вернуть в работу</button>'
+            : '<button class="btn btn-sm" onclick="archiveProblem(' + JSON.stringify(key) + ')">В архив</button>')
+      + '</div>'
+      + (active.length
+          ? '<div class="note" style="margin-top:12px">Склеить с другой проблемой — разметка лекций переедет на выбранную, эта уйдёт в архив. Обратно не разделить.</div>'
+            + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">'
+            + '<select id="pr-merge-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;flex:1">'
+            + active.map(function(a){ return '<option value="' + prEsc(a.key) + '">' + prEsc(a.label) + '</option>'; }).join('')
+            + '</select><button class="btn btn-sm" onclick="mergeProblem(' + JSON.stringify(key) + ')">Склеить</button></div>'
+          : '');
+  }
+
+  async function saveProblemRow(payload, statusEl){
+    if (statusEl) statusEl.textContent = 'Сохраняю...';
+    const r = await fetch(`${API_URL}/problems/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!r.ok){
+      const e = await r.json().catch(function(){ return {}; });
+      throw new Error(e.detail || ('сервер ответил ' + r.status));
+    }
+  }
+
+  async function createProblem(){
+    const statusEl = document.getElementById('pr-new-status');
+    const key = (document.getElementById('pr-new-key').value || '').trim();
+    const label = (document.getElementById('pr-new-label').value || '').trim();
+    if (!/^[a-z0-9_]+$/.test(key)){
+      statusEl.textContent = 'Ключ — латиница в нижнем регистре, цифры и подчёркивание';
+      return;
+    }
+    if (problemsAll.some(function(p){ return p.key === key; })){
+      statusEl.textContent = 'Такой ключ уже есть';
+      return;
+    }
+    try {
+      await saveProblemRow({
+        key: key, label: label || key,
+        description: (document.getElementById('pr-new-desc').value || '').trim(),
+        sort_order: 100, status: 'active',
+      }, statusEl);
+      document.getElementById('pr-new-key').value = '';
+      document.getElementById('pr-new-label').value = '';
+      document.getElementById('pr-new-desc').value = '';
+      statusEl.textContent = 'Добавлено';
+      await loadProblemsAdmin();
+    } catch(e){ statusEl.textContent = e.message; }
+  }
+
+  async function saveProblem(key){
+    const p = problemsAll.find(function(x){ return x.key === key; });
+    const statusEl = document.getElementById('pr-st-' + key);
+    if (!p) return;
+    try {
+      await saveProblemRow({
+        key: key,
+        label: (document.getElementById('pr-label-' + key).value || '').trim() || key,
+        description: (document.getElementById('pr-desc-' + key).value || '').trim(),
+        sort_order: parseInt(document.getElementById('pr-order-' + key).value, 10) || 100,
+        status: p.status,
+      }, statusEl);
+      await loadProblemsAdmin();
+    } catch(e){ if (statusEl) statusEl.textContent = e.message; }
+  }
+
+  async function acceptProblem(key){
+    const p = problemsAll.find(function(x){ return x.key === key; });
+    if (!p) return;
+    try {
+      await saveProblemRow({ key: key, label: p.label, description: p.description,
+                             sort_order: p.sort_order || 100, status: 'active' }, null);
+      await loadProblemsAdmin();
+    } catch(e){ alert(e.message); }
+  }
+
+  async function archiveProblem(key){
+    const p = problemsAll.find(function(x){ return x.key === key; });
+    if (!p) return;
+    if (!confirm('Убрать «' + p.label + '» из работы? Разметка уже размеченных лекций сохранится.')) return;
+    try {
+      await saveProblemRow({ key: key, label: p.label, description: p.description,
+                             sort_order: p.sort_order || 100, status: 'archived' }, null);
+      await loadProblemsAdmin();
+    } catch(e){ alert(e.message); }
+  }
+
+  async function mergeProblem(fromKey){
+    const sel = document.getElementById('pr-merge-' + fromKey);
+    if (!sel || !sel.value) return;
+    const from = problemsAll.find(function(x){ return x.key === fromKey; });
+    const into = problemsAll.find(function(x){ return x.key === sel.value; });
+    if (!from || !into) return;
+    if (!confirm('Склеить «' + from.label + '» с «' + into.label + '»?\n\nВся разметка лекций переедет на «' + into.label + '», а «' + from.label + '» уйдёт в архив. Разделить обратно будет нельзя.')) return;
+    try {
+      const r = await fetch(`${API_URL}/problems/admin/merge?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_key: fromKey, into_key: sel.value }),
+      });
+      const data = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(data.detail || ('сервер ответил ' + r.status));
+      alert('Готово. Лекций обновлено: ' + (data.lectures_updated || 0));
+      await loadProblemsAdmin();
+      if (libraryLoaded) await loadLibraryFromDB();
+    } catch(e){ alert(e.message); }
+  }
+
+  /* ══ Разметка лекции проблемами ═══════════════════════════════════════════
+     Главный ключ маршрутизации личного плана. У каждой отмеченной проблемы свой
+     ВЕС (основная тема занятия или задета вскользь) и, если есть, ТАЙМКОД места,
+     где про неё говорят: человеку с одной болью трёхчасовой эфир без указателя
+     бесполезен.
+
+     prefix разводит разные экземпляры блока на одной странице: 'res' — разметка
+     нового видео, 'lib-<slug>' — редактор карточки в библиотеке. */
+
+  const LEVELS = [
+    { key:'',         name:'не размечено' },
+    { key:'beginner', name:'начинающим' },
+    { key:'mid',      name:'уже что-то делает' },
+    { key:'advanced', name:'продвинутым' },
+    { key:'any',      name:'подойдёт всем' },
+  ];
+  const DEPTHS = [
+    { key:'',      name:'не размечено' },
+    { key:'light', name:'лёгкая, простая' },
+    { key:'deep',  name:'плотная, глубокая' },
+  ];
+  const VIBES = [
+    { key:'',        name:'не размечено' },
+    { key:'inspire', name:'вдохновляющая, про состояние' },
+    { key:'work',    name:'рабочая, инструментальная' },
+  ];
+
+  function problemsBlockHtml(prefix, lec){
+    const chosen = {};
+    (lec.problems || []).forEach(function(p){
+      if (p && p.key) chosen[p.key] = p;
+    });
+    const active = activeProblems();
+
+    // Проблема, которой уже нет в активных (ушла в архив), но лекция ею размечена —
+    // показываем, иначе сохранение молча стёрло бы метку
+    const extra = Object.keys(chosen).filter(function(k){
+      return !active.some(function(a){ return a.key === k; });
+    }).map(function(k){ return { key:k, label: problemLabel(k) + ' (в архиве)' }; });
+
+    const rows = active.concat(extra).map(function(p){
+      const on = !!chosen[p.key];
+      const cur = chosen[p.key] || {};
+      return '<div class="dev-item' + (on ? ' on' : '') + '" data-key="' + prEsc(p.key) + '" style="display:block">'
+        + '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;margin:0">'
+          + '<input type="checkbox" ' + (on ? 'checked' : '')
+          + ' onchange="toggleProblemPick(this,' + JSON.stringify(prefix) + ')">'
+          + '<span><span class="dev-name">' + prEsc(p.label) + '</span>'
+          + (p.description ? '<span class="dev-hint">' + prEsc(p.description) + '</span>' : '')
+          + '</span></label>'
+        + '<div class="pr-detail" style="display:' + (on ? 'flex' : 'none') + ';gap:8px;margin-top:8px;flex-wrap:wrap">'
+          + '<select class="btn btn-sm pr-weight" style="cursor:pointer">'
+            + '<option value="main"' + (cur.weight !== 'touch' ? ' selected' : '') + '>в основном про это</option>'
+            + '<option value="touch"' + (cur.weight === 'touch' ? ' selected' : '') + '>задето вскользь</option>'
+          + '</select>'
+          + '<input type="text" class="btn btn-sm pr-timecode" style="text-align:left;cursor:text;width:110px" '
+            + 'placeholder="12:34" value="' + prEsc(cur.timecode || '') + '">'
+        + '</div></div>';
+    }).join('');
+
+    const sel = function(id, list, val){
+      return '<select id="' + id + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
+        + list.map(function(o){
+            return '<option value="' + o.key + '"' + ((val||'') === o.key ? ' selected' : '') + '>' + o.name + '</option>';
+          }).join('') + '</select>';
+    };
+
+    return '<div class="result-block-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        + '<span>Что решает занятие</span>'
+        + '<button class="export-btn" onclick="suggestProblems(' + JSON.stringify(prefix) + ')">Предложить</button>'
+      + '</div>'
+      + '<div class="note" style="margin-bottom:8px">Проблемы клиента, которые разбирает это занятие. По ним собирается личный план. Справочник правится на вкладке «Проблемы».</div>'
+      + '<div class="note" id="' + prefix + '-problems-status"></div>'
+      + '<div id="' + prefix + '-problems-list">'
+        + (active.length || extra.length ? '<div class="dev-grid" style="grid-template-columns:1fr">' + rows + '</div>'
+                                         : '<div class="empty-dict">Справочник проблем пуст — заведи первую на вкладке «Проблемы» или нажми «Предложить», модель подскажет</div>')
+      + '</div>'
+      + '<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Кому подойдёт</label>' + sel(prefix + '-level', LEVELS, lec.level) + '</div>'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Глубина</label>' + sel(prefix + '-depth', DEPTHS, lec.depth) + '</div>'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Характер</label>' + sel(prefix + '-vibe', VIBES, lec.vibe) + '</div>'
+      + '</div>';
+  }
+
+  // Галочка показывает и прячет вес с таймкодом: пока проблема не отмечена,
+  // эти поля только шумят
+  function toggleProblemPick(input, prefix){
+    const item = input.closest('.dev-item');
+    if (!item) return;
+    item.classList.toggle('on', input.checked);
+    const det = item.querySelector('.pr-detail');
+    if (det) det.style.display = input.checked ? 'flex' : 'none';
+    syncProblemsToResult(prefix);
+  }
+
+  function collectProblems(prefix){
+    const out = [];
+    document.querySelectorAll('#' + prefix + '-problems-list .dev-item').forEach(function(it){
+      const cb = it.querySelector('input[type=checkbox]');
+      if (!cb || !cb.checked) return;
+      const w = it.querySelector('.pr-weight');
+      const t = it.querySelector('.pr-timecode');
+      out.push({
+        key: it.getAttribute('data-key'),
+        weight: (w && w.value === 'touch') ? 'touch' : 'main',
+        timecode: t ? t.value.trim() : '',
+      });
+    });
+    return out;
+  }
+
+  function collectMarkup(prefix){
+    const val = function(id){ const el = document.getElementById(id); return el ? el.value : ''; };
+    return {
+      problems: collectProblems(prefix),
+      level: val(prefix + '-level'),
+      depth: val(prefix + '-depth'),
+      vibe:  val(prefix + '-vibe'),
+    };
+  }
+
+  /* Безопасная версия для СОХРАНЕНИЯ. Блок мог не отрисоваться (справочник ещё
+     грузился), и тогда collectMarkup вернул бы пустоту — а PUT с пустым списком
+     СТЁР БЫ уже проставленную разметку. Поэтому: поля, которых нет на экране,
+     в payload не кладём вообще — бэкенд их не тронет (exclude_unset).
+     Отдельно: пустой список галочек шлём только если галочки реально
+     отрисованы, иначе это не «человек всё снял», а «блок не успел» */
+  function markupPayload(prefix){
+    const out = {};
+    const listEl = document.getElementById(prefix + '-problems-list');
+    if (listEl && listEl.querySelector('.dev-item')){
+      out.problems = collectProblems(prefix);
+    }
+    [['level', LEVELS], ['depth', DEPTHS], ['vibe', VIBES]].forEach(function(pair){
+      const el = document.getElementById(prefix + '-' + pair[0]);
+      if (el) out[pair[0]] = el.value;
+    });
+    return out;
+  }
+
+  // Разметка нового видео живёт в currentResult, а uploadOneToDB отправляет
+  // именно его, а не то, что на экране — те же грабли, что уже ловили с develops
+  function syncProblemsToResult(prefix){
+    if (prefix !== 'res' || !currentResult) return;
+    const m = collectMarkup('res');
+    currentResult.problems = m.problems;
+    currentResult.level = m.level;
+    currentResult.depth = m.depth;
+    currentResult.vibe = m.vibe;
+  }
+
+  async function suggestProblems(prefix){
+    const isLib = prefix !== 'res';
+    const keyEl = document.getElementById(isLib ? 'lib-openai-key' : 'openai-key');
+    const key = keyEl ? keyEl.value.trim() : '';
+    const statusEl = document.getElementById(prefix + '-problems-status');
+    if (!key){ alert('Впиши OpenAI API Key в карточке выше'); return; }
+
+    let transcript = '', title = '';
+    if (isLib){
+      const slug = prefix.replace(/^lib-/, '');
+      const l = libraryLectures.find(function(x){ return x.slug === slug; });
+      if (!l){ alert('Лекция не найдена'); return; }
+      transcript = l.transcript || ''; title = l.title || '';
+    } else {
+      if (!currentResult || !currentTranscript){ alert('Сначала проанализируй видео'); return; }
+      transcript = currentTranscript; title = currentResult.title || '';
+    }
+    if (!transcript){ statusEl.textContent = 'У этой лекции нет транскрипта — размечать не по чему'; return; }
+
+    statusEl.textContent = 'Смотрю, что разбирает это занятие...';
+    try {
+      const res = await askProblems(key, transcript, title);
+      // Новые проблемы, предложенные моделью, заводим со статусом suggested —
+      // в разметке они не участвуют, пока Denis их не примет
+      if (res.new_problems.length){
+        for (const np of res.new_problems){
+          if (problemsAll.some(function(p){ return p.key === np.key; })) continue;
+          try {
+            await saveProblemRow({ key: np.key, label: np.label, description: np.description || '',
+                                   sort_order: 100, status: 'suggested' }, null);
+          } catch(e){}
+        }
+        await ensureProblemsRefresh();
+      }
+      applySuggestedProblems(prefix, res);
+      const names = res.problems.map(function(p){ return problemLabel(p.key); });
+      statusEl.innerHTML = (names.length ? 'Предложено: ' + prEsc(names.join(', ')) + '. Проверь галочки и веса.' : 'Модель не нашла подходящей проблемы.')
+        + (res.new_problems.length
+            ? '<br>Предложены новые проблемы: <b>' + prEsc(res.new_problems.map(function(n){ return n.label; }).join(', '))
+              + '</b> — прими или склей их на вкладке «Проблемы», тогда их можно будет ставить.'
+            : '');
+    } catch(e){
+      statusEl.textContent = '';
+      alert(e.message);
+    }
+  }
+
+  async function ensureProblemsRefresh(){
+    problemsAll = [];
+    await ensureProblemsLoaded();
+  }
+
+  // Перерисовываем блок с уже проставленными галочками. Существующую разметку
+  // не затираем: модель дополняет, а не заменяет решение человека
+  function applySuggestedProblems(prefix, res){
+    const listEl = document.getElementById(prefix + '-problems-list');
+    if (!listEl) return;
+    const cur = collectMarkup(prefix);
+    const byKey = {};
+    cur.problems.forEach(function(p){ byKey[p.key] = p; });
+    res.problems.forEach(function(p){
+      if (!activeProblems().some(function(a){ return a.key === p.key; })) return;  // suggested ещё нельзя ставить
+      if (byKey[p.key]) return;   // человек уже отметил — не трогаем его вес
+      byKey[p.key] = { key: p.key, weight: p.weight === 'touch' ? 'touch' : 'main', timecode: p.timecode || '' };
+    });
+    const merged = { problems: Object.keys(byKey).map(function(k){ return byKey[k]; }),
+                     level: res.level || cur.level, depth: res.depth || cur.depth, vibe: res.vibe || cur.vibe };
+    const holder = listEl.parentElement;
+    holder.innerHTML = problemsBlockHtml(prefix, merged);
+    syncProblemsToResult(prefix);
+  }
+
+  /* ══ Массовая разметка ════════════════════════════════════════════════════
+     Ради этого всё и затевалось: руками разметить восемь десятков лекций Denis
+     не станет. Идём последовательно, по одной лекции — параллельно нельзя,
+     упрёмся в лимит токенов OpenAI (уже ловили на выжимках).
+
+     Прогон можно остановить: длинная библиотека это десятки минут и реальные
+     деньги, и «закрыть вкладку» — плохой способ прерваться. */
+
+  let bulkRunning = false;
+  let bulkStop = false;
+
+  async function runBulkMarkup(){
+    const btn = document.getElementById('bulk-run-btn');
+    const statusEl = document.getElementById('bulk-status');
+    const logEl = document.getElementById('bulk-log');
+
+    if (bulkRunning){ bulkStop = true; statusEl.textContent = 'Останавливаю после текущей лекции...'; return; }
+
+    const key = (document.getElementById('lib-openai-key').value || '').trim();
+    if (!key){ alert('Впиши OpenAI API Key в карточке выше'); return; }
+    if (!libraryLoaded){ alert('Сначала загрузи лекции из базы'); return; }
+
+    await ensureProblemsLoaded();
+    if (!activeProblems().length){
+      if (!confirm('Справочник проблем пуст. Модель ничего не сможет отметить, но предложит новые проблемы — их потом примешь на вкладке «Проблемы».\n\nЗапустить так?')) return;
+    }
+
+    const scope = document.getElementById('bulk-scope').value;
+    // Лекция без транскрипта не размечается ничем — модели нечего читать
+    let queue = libraryLectures.filter(function(l){ return (l.transcript || '').length > 100; });
+    if (scope === 'unmarked'){
+      queue = queue.filter(function(l){ return !(l.problems || []).length; });
+    }
+    const skipped = libraryLectures.length - queue.length;
+
+    if (!queue.length){
+      statusEl.textContent = 'Нечего размечать' + (skipped ? ' (' + skipped + ' пропущено: без транскрипта или уже размечены)' : '');
+      return;
+    }
+    if (!confirm('Разметить лекций: ' + queue.length + '?\n\nЭто займёт примерно ' + Math.ceil(queue.length * 12 / 60) + ' мин и потратит примерно $' + (queue.length * 0.05).toFixed(2) + '.'))
+      return;
+
+    bulkRunning = true; bulkStop = false;
+    btn.textContent = 'Остановить';
+    logEl.innerHTML = '';
+    let done = 0, failed = 0, newProblems = 0;
+
+    for (const lec of queue){
+      if (bulkStop) break;
+      statusEl.textContent = 'Размечаю ' + (done + failed + 1) + ' из ' + queue.length + ': ' + lec.title;
+      try {
+        const res = await askProblems(key, lec.transcript, lec.title);
+
+        // Новые проблемы копим со статусом suggested — в разметку они не пойдут,
+        // пока Denis не примет. Это и не даёт справочнику расползтись
+        for (const np of res.new_problems){
+          if (problemsAll.some(function(p){ return p.key === np.key; })) continue;
+          try {
+            await saveProblemRow({ key: np.key, label: np.label, description: np.description || '',
+                                   sort_order: 100, status: 'suggested' }, null);
+            newProblems++;
+            await ensureProblemsRefresh();
+          } catch(e){}
+        }
+
+        const payload = {
+          problems: res.problems.map(function(p){
+            return { key: p.key, weight: p.weight === 'touch' ? 'touch' : 'main', timecode: p.timecode || '' };
+          }),
+          level: res.level, depth: res.depth, vibe: res.vibe,
+        };
+        const r = await fetch(`${API_URL}/lectures/${lec.slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (!r.ok) throw new Error('сохранение: HTTP ' + r.status);
+        const updated = await r.json();
+        const idx = libraryLectures.findIndex(function(x){ return x.slug === lec.slug; });
+        if (idx >= 0) libraryLectures[idx] = updated;
+
+        done++;
+        const names = (updated.problems || []).map(function(p){
+          return problemLabel(p.key) + (p.weight === 'touch' ? ' (вскользь)' : '');
+        });
+        bulkLog(lec.title, names.length ? names.join(', ') : 'ничего не подошло', false);
+      } catch(e){
+        failed++;
+        bulkLog(lec.title, e.message, true);
+        // Лимит токенов — самая частая причина. Ждём и продолжаем, а не падаем:
+        // прерваться на 40-й лекции из 80 обиднее, чем подождать минуту
+        if (/429|rate limit/i.test(e.message || '')){
+          statusEl.textContent = 'Уперлись в лимит OpenAI — жду минуту...';
+          await new Promise(function(r){ setTimeout(r, 60000); });
+        }
+      }
+    }
+
+    bulkRunning = false;
+    btn.textContent = 'Разметить';
+    statusEl.textContent = (bulkStop ? 'Остановлено. ' : 'Готово. ')
+      + 'Размечено: ' + done
+      + (failed ? ', с ошибкой: ' + failed : '')
+      + (skipped ? ', пропущено: ' + skipped : '')
+      + (newProblems ? '. Модель предложила новых проблем: ' + newProblems + ' — прими их на вкладке «Проблемы» и прогони ещё раз' : '');
+    renderLibraryList();
+  }
+
+  function bulkLog(title, text, isError){
+    const logEl = document.getElementById('bulk-log');
+    if (!logEl) return;
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.style.cssText = 'padding:4px 0;border-bottom:1px solid var(--line)'
+      + (isError ? ';color:var(--danger,#c0392b)' : '');
+    div.innerHTML = '<b>' + prEsc(title) + '</b> — ' + prEsc(text);
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  async function askProblems(apiKey, transcript, title){
+    const active = activeProblems();
+    const list = active.length
+      ? active.map(function(p){ return `- ${p.key}: ${p.label}${p.description ? ' — ' + p.description : ''}`; }).join('\n')
+      : '(справочник пока пуст)';
+
+    const prompt = `Ты помогаешь Денису разметить его лекцию "${title||''}" для системы подбора персонального плана обучения.
+
+Транскрипт лекции:
+---
+${transcript}
+---
+
+СПРАВОЧНИК ПРОБЛЕМ КЛИЕНТА (то, с чем человек приходит):
+${list}
+
+Задача — определить:
+
+1. problems: какие проблемы из справочника это занятие реально разбирает.
+   Для каждой укажи:
+   - key: ключ из справочника
+   - weight: "main" если занятие в основном про это, "touch" если задето вскользь
+   - timecode: если в лекции есть чёткое место, где про это говорят — укажи в формате "МM:SS" или "Ч:MM:SS". Если момент размазан по всей лекции, оставь пустым.
+   Обычно у занятия 1-3 проблемы. Не отмечай всё подряд.
+
+2. new_problems: если занятие разбирает важную проблему клиента, которой В СПРАВОЧНИКЕ НЕТ — предложи её:
+   - key: короткий латинский ключ в нижнем регистре (например price_objection)
+   - label: как её назвал бы сам клиент, простыми словами
+   - description: чем отличается от соседних проблем
+   Предлагай только если это правда отдельная проблема, а не синоним существующей. Если всё покрыто справочником — верни пустой список.
+
+3. level: кому подойдёт — "beginner" (начинающим), "mid" (уже что-то делает), "advanced" (продвинутым) или "any" (всем)
+4. depth: "light" (лёгкая, обзорная) или "deep" (плотная, глубокая проработка)
+5. vibe: "inspire" (вдохновляющая, про состояние и мотивацию) или "work" (рабочая, инструментальная)
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки:
+{"problems":[{"key":"clients","weight":"main","timecode":"12:34"}],"new_problems":[],"level":"beginner","depth":"deep","vibe":"work"}`;
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!r.ok){
+      const e = await r.json().catch(function(){ return {}; });
+      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
+    }
+    const data = await r.json();
+    const clean = data.choices[0].message.content.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    const known = activeProblems().map(function(p){ return p.key; });
+    const okOne = function(v, allowed){ return allowed.indexOf(v) !== -1 ? v : ''; };
+    return {
+      // Выдуманные ключи отсеиваем здесь же, не дожидаясь бэкенда — иначе
+      // галочка встанет напротив несуществующей проблемы и молча пропадёт
+      problems: (parsed.problems || []).filter(function(p){ return p && known.indexOf(p.key) !== -1; }),
+      new_problems: (parsed.new_problems || []).filter(function(p){
+        return p && /^[a-z0-9_]+$/.test(p.key || '') && known.indexOf(p.key) === -1;
+      }),
+      level: okOne(parsed.level, ['beginner','mid','advanced','any']),
+      depth: okOne(parsed.depth, ['light','deep']),
+      vibe:  okOne(parsed.vibe,  ['inspire','work']),
+    };
   }
 
   async function askDevelops(apiKey, transcript, title){
