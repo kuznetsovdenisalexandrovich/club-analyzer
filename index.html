@@ -606,6 +606,17 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
         <label>Чем отличается от соседних (это читает модель при разметке)</label>
         <textarea id="pr-new-desc" class="tc-input" rows="2" placeholder="Про поиск НОВЫХ клиентов и источники трафика. Не про то, как продать уже пришедшему — это отдельная проблема"></textarea>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:160px">
+          <label>Фаза пути</label>
+          <select id="pr-new-phase" class="btn btn-sm" style="cursor:pointer;width:100%"></select>
+        </div>
+        <div class="field" style="flex:1;min-width:160px">
+          <label>Частный случай чего-то общего?</label>
+          <select id="pr-new-parent" class="btn btn-sm" style="cursor:pointer;width:100%"></select>
+        </div>
+      </div>
+      <div class="note" style="margin-bottom:8px">Например, «Как отработать "нет денег"» — частный случай «Как закрывать возражения». Тогда человеку с конкретным возражением сначала покажут точные лекции, а потом общие.</div>
       <div class="note" id="pr-new-status"></div>
       <button class="btn-primary" style="width:100%;margin-top:6px" onclick="createProblem()">Добавить</button>
     </div>
@@ -1837,6 +1848,28 @@ ${tcList}
 
   let problemsAll = [];   // весь справочник, включая предложенные и архивные
 
+  /* Фазы пути — те же, по которым у Denis'а разложены боги. Нужны, чтобы
+     полтора десятка проблем не были стеной: и в аппе человеку выбирать,
+     и здесь при разметке глазами искать. */
+  const PHASES = [
+    { key:'search',  name:'Поиск' },
+    { key:'qualify', name:'Квалификация' },
+    { key:'deal',    name:'Сделка' },
+    { key:'retain',  name:'Удержание' },
+    { key:'self',    name:'Про себя' },
+  ];
+
+  function phaseName(key){
+    const p = PHASES.find(function(x){ return x.key === key; });
+    return p ? p.name : 'Сделка';
+  }
+
+  // Частные случаи проблемы. Общая тема и конкретная — у Denis'а это разные
+  // лекции, поэтому и проблемы разные, связанные родителем
+  function childrenOf(key){
+    return problemsAll.filter(function(p){ return p.parent_key === key && p.status !== 'archived'; });
+  }
+
   function prEsc(s){
     return String(s == null ? '' : s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1877,6 +1910,27 @@ ${tcList}
     } catch(e){}
   }
 
+  // Селекторы в форме добавления заполняем при каждой загрузке — список
+  // возможных родителей меняется по мере наполнения справочника
+  function fillNewProblemSelects(){
+    const phEl = document.getElementById('pr-new-phase');
+    const paEl = document.getElementById('pr-new-parent');
+    if (phEl && !phEl.options.length){
+      phEl.innerHTML = PHASES.map(function(p){
+        return '<option value="' + p.key + '"' + (p.key === 'deal' ? ' selected' : '') + '>' + p.name + '</option>';
+      }).join('');
+    }
+    if (paEl){
+      const prev = paEl.value;
+      // Родителем может быть только проблема верхнего уровня — дерево держим
+      // плоским, два уровня закрывают «возражения вообще → нет денег»
+      const cand = activeProblems().filter(function(p){ return !p.parent_key; });
+      paEl.innerHTML = '<option value="">нет, это отдельная проблема</option>'
+        + cand.map(function(p){ return '<option value="' + prEsc(p.key) + '">' + prEsc(p.label) + '</option>'; }).join('');
+      if (prev) paEl.value = prev;
+    }
+  }
+
   function renderProblems(){
     const listEl = document.getElementById('pr-list');
     const statusEl = document.getElementById('pr-status');
@@ -1887,6 +1941,7 @@ ${tcList}
     const active = problemsAll.filter(function(p){ return p.status === 'active'; });
     const suggested = problemsAll.filter(function(p){ return p.status === 'suggested'; });
     const archived = problemsAll.filter(function(p){ return p.status === 'archived'; });
+    fillNewProblemSelects();
 
     if (statusEl){
       statusEl.textContent = problemsAll.length
@@ -1915,28 +1970,60 @@ ${tcList}
       }).join('');
     }
 
-    // Сам справочник
+    // Сам справочник — по фазам, внутри фазы частные случаи под своим родителем
     const rows = active.concat(archived);
     if (!rows.length){ listEl.innerHTML = '<div class="empty-dict">Пока пусто</div>'; return; }
-    listEl.innerHTML = rows.map(function(p){
+
+    const cardHtml = function(p, isChild){
       const isArchived = p.status === 'archived';
       // Проблема без единой лекции — человек её выберет, а показать будет нечего.
       // Это не ошибка, а сигнал: сюда нужен контент
       const empty = !isArchived && !p.lectures_main && !p.lectures_touch;
-      return '<div class="card" style="margin-bottom:10px' + (isArchived ? ';opacity:.55' : '') + '">'
+      const kids = childrenOf(p.key);
+      return '<div class="card" style="margin-bottom:10px'
+          + (isChild ? ';margin-left:20px;border-left:2px solid var(--line)' : '')
+          + (isArchived ? ';opacity:.55' : '') + '">'
         + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
           + '<div style="flex:1">'
-            + '<div style="font-size:13px;font-weight:600">' + prEsc(p.label)
+            + '<div style="font-size:13px;font-weight:600">'
+              + (isChild ? '<span style="opacity:.5">↳ </span>' : '') + prEsc(p.label)
               + (isArchived ? ' <span class="note" style="font-weight:400">· в архиве</span>' : '') + '</div>'
             + '<div class="note">' + prEsc(p.key) + ' · основных ' + (p.lectures_main||0)
               + ', вскользь ' + (p.lectures_touch||0)
-              + (empty ? ' — <b>нет ни одной лекции</b>' : '') + '</div>'
+              + (empty ? ' — <b>нет ни одной лекции</b>' : '')
+              + (kids.length ? ' · частных случаев: ' + kids.length : '') + '</div>'
           + '</div>'
           + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + JSON.stringify(p.key) + ')">Править</button>'
         + '</div>'
         + '<div id="pr-editor-' + prEsc(p.key) + '" style="display:none;margin-top:12px"></div>'
         + '</div>';
-    }).join('');
+    };
+
+    let html = '';
+    PHASES.forEach(function(ph){
+      const inPhase = rows.filter(function(p){ return (p.phase || 'deal') === ph.key && !p.parent_key; });
+      if (!inPhase.length) return;
+      html += '<div class="result-block-label" style="margin:16px 0 8px">' + ph.name + '</div>';
+      inPhase.forEach(function(p){
+        html += cardHtml(p, false);
+        // Частные случаи идут сразу под родителем, даже если у них своя фаза
+        rows.filter(function(c){ return c.parent_key === p.key; })
+            .forEach(function(c){ html += cardHtml(c, true); });
+      });
+    });
+
+    // Осиротевшие: родитель удалён или проблема ссылается на несуществующее.
+    // Не прячем — иначе они пропали бы из интерфейса совсем
+    const shown = new Set();
+    rows.forEach(function(p){ if (!p.parent_key) shown.add(p.key); });
+    rows.forEach(function(p){ if (p.parent_key && shown.has(p.parent_key)) shown.add(p.key); });
+    const orphans = rows.filter(function(p){ return !shown.has(p.key); });
+    if (orphans.length){
+      html += '<div class="result-block-label" style="margin:16px 0 8px">Без родителя</div>';
+      orphans.forEach(function(p){ html += cardHtml(p, false); });
+    }
+
+    listEl.innerHTML = html;
   }
 
   function toggleProblemEditor(key){
@@ -1947,11 +2034,32 @@ ${tcList}
     const p = problemsAll.find(function(x){ return x.key === key; });
     if (!p) return;
     const active = activeProblems().filter(function(a){ return a.key !== key; });
+    // Родителем может быть только проблема верхнего уровня, и сама эта проблема
+    // не может уйти под кого-то, если у неё уже есть частные случаи
+    const hasKids = childrenOf(key).length > 0;
+    const parentCand = active.filter(function(a){ return !a.parent_key; });
     el.innerHTML =
         '<div class="field"><label>Название</label>'
       + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-label-' + prEsc(key) + '" value="' + prEsc(p.label) + '"></div>'
       + '<div class="field"><label>Чем отличается от соседних (читает модель)</label>'
       + '<textarea id="pr-desc-' + prEsc(key) + '" class="tc-input" rows="2">' + prEsc(p.description) + '</textarea></div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Фаза пути</label>'
+        + '<select id="pr-phase-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
+        + PHASES.map(function(ph){
+            return '<option value="' + ph.key + '"' + ((p.phase||'deal') === ph.key ? ' selected' : '') + '>' + ph.name + '</option>';
+          }).join('')
+        + '</select></div>'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Частный случай чего?</label>'
+        + '<select id="pr-parent-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;width:100%"' + (hasKids ? ' disabled' : '') + '>'
+        + '<option value="">отдельная проблема</option>'
+        + parentCand.map(function(c){
+            return '<option value="' + prEsc(c.key) + '"' + (p.parent_key === c.key ? ' selected' : '') + '>' + prEsc(c.label) + '</option>';
+          }).join('')
+        + '</select>'
+        + (hasKids ? '<div class="note">У этой проблемы есть частные случаи — она сама остаётся верхнего уровня</div>' : '')
+        + '</div>'
+      + '</div>'
       + '<div class="field"><label>Порядок в списке</label>'
       + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-order-' + prEsc(key) + '" value="' + (p.sort_order||100) + '"></div>'
       + '<div class="note" id="pr-st-' + prEsc(key) + '"></div>'
@@ -1997,6 +2105,8 @@ ${tcList}
       await saveProblemRow({
         key: key, label: label || key,
         description: (document.getElementById('pr-new-desc').value || '').trim(),
+        phase: document.getElementById('pr-new-phase').value || 'deal',
+        parent_key: document.getElementById('pr-new-parent').value || '',
         sort_order: 100, status: 'active',
       }, statusEl);
       document.getElementById('pr-new-key').value = '';
@@ -2016,6 +2126,8 @@ ${tcList}
         key: key,
         label: (document.getElementById('pr-label-' + key).value || '').trim() || key,
         description: (document.getElementById('pr-desc-' + key).value || '').trim(),
+        phase: (document.getElementById('pr-phase-' + key) || {}).value || p.phase || 'deal',
+        parent_key: (document.getElementById('pr-parent-' + key) || {}).value || '',
         sort_order: parseInt(document.getElementById('pr-order-' + key).value, 10) || 100,
         status: p.status,
       }, statusEl);
@@ -2028,6 +2140,7 @@ ${tcList}
     if (!p) return;
     try {
       await saveProblemRow({ key: key, label: p.label, description: p.description,
+                             phase: p.phase || 'deal', parent_key: p.parent_key || '',
                              sort_order: p.sort_order || 100, status: 'active' }, null);
       await loadProblemsAdmin();
     } catch(e){ alert(e.message); }
@@ -2039,6 +2152,7 @@ ${tcList}
     if (!confirm('Убрать «' + p.label + '» из работы? Разметка уже размеченных лекций сохранится.')) return;
     try {
       await saveProblemRow({ key: key, label: p.label, description: p.description,
+                             phase: p.phase || 'deal', parent_key: p.parent_key || '',
                              sort_order: p.sort_order || 100, status: 'archived' }, null);
       await loadProblemsAdmin();
     } catch(e){ alert(e.message); }
@@ -2104,14 +2218,15 @@ ${tcList}
       return !active.some(function(a){ return a.key === k; });
     }).map(function(k){ return { key:k, label: problemLabel(k) + ' (в архиве)' }; });
 
-    const rows = active.concat(extra).map(function(p){
+    const rowFor = function(p, isChild){
       const on = !!chosen[p.key];
       const cur = chosen[p.key] || {};
-      return '<div class="dev-item' + (on ? ' on' : '') + '" data-key="' + prEsc(p.key) + '" style="display:block">'
+      return '<div class="dev-item' + (on ? ' on' : '') + '" data-key="' + prEsc(p.key) + '" style="display:block'
+        + (isChild ? ';margin-left:18px' : '') + '">'
         + '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;margin:0">'
           + '<input type="checkbox" ' + (on ? 'checked' : '')
           + ' onchange="toggleProblemPick(this,' + JSON.stringify(prefix) + ')">'
-          + '<span><span class="dev-name">' + prEsc(p.label) + '</span>'
+          + '<span><span class="dev-name">' + (isChild ? '<span style="opacity:.5">↳ </span>' : '') + prEsc(p.label) + '</span>'
           + (p.description ? '<span class="dev-hint">' + prEsc(p.description) + '</span>' : '')
           + '</span></label>'
         + '<div class="pr-detail" style="display:' + (on ? 'flex' : 'none') + ';gap:8px;margin-top:8px;flex-wrap:wrap">'
@@ -2122,7 +2237,31 @@ ${tcList}
           + '<input type="text" class="btn btn-sm pr-timecode" style="text-align:left;cursor:text;width:110px" '
             + 'placeholder="12:34" value="' + prEsc(cur.timecode || '') + '">'
         + '</div></div>';
-    }).join('');
+    };
+
+    // Группируем по фазам, частные случаи — сразу под своим родителем.
+    // Плоский список из полутора десятков пунктов глазами не читается
+    let rows = '';
+    PHASES.forEach(function(ph){
+      const inPhase = active.filter(function(p){ return (p.phase || 'deal') === ph.key && !p.parent_key; });
+      if (!inPhase.length) return;
+      rows += '<div class="note" style="margin:10px 0 4px;font-weight:600">' + ph.name + '</div>';
+      inPhase.forEach(function(p){
+        rows += rowFor(p, false);
+        active.filter(function(c){ return c.parent_key === p.key; })
+              .forEach(function(c){ rows += rowFor(c, true); });
+      });
+    });
+    // Проблемы, чей родитель не активен, и архивные метки лекции — в конец,
+    // чтобы ни одна проставленная галочка не пропала с экрана
+    const placed = new Set();
+    active.forEach(function(p){ if (!p.parent_key) placed.add(p.key); });
+    active.forEach(function(p){ if (p.parent_key && placed.has(p.parent_key)) placed.add(p.key); });
+    const rest = active.filter(function(p){ return !placed.has(p.key); }).concat(extra);
+    if (rest.length){
+      rows += '<div class="note" style="margin:10px 0 4px;font-weight:600">Прочее</div>';
+      rest.forEach(function(p){ rows += rowFor(p, false); });
+    }
 
     const sel = function(id, list, val){
       return '<select id="' + id + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
@@ -2244,6 +2383,7 @@ ${tcList}
           if (problemsAll.some(function(p){ return p.key === np.key; })) continue;
           try {
             await saveProblemRow({ key: np.key, label: np.label, description: np.description || '',
+                                   phase: np.phase || 'deal', parent_key: '',
                                    sort_order: 100, status: 'suggested' }, null);
           } catch(e){}
         }
@@ -2346,6 +2486,7 @@ ${tcList}
           if (problemsAll.some(function(p){ return p.key === np.key; })) continue;
           try {
             await saveProblemRow({ key: np.key, label: np.label, description: np.description || '',
+                                   phase: np.phase || 'deal', parent_key: '',
                                    sort_order: 100, status: 'suggested' }, null);
             newProblems++;
             await ensureProblemsRefresh();
@@ -2407,8 +2548,18 @@ ${tcList}
 
   async function askProblems(apiKey, transcript, title){
     const active = activeProblems();
+    // Частные случаи показываем модели ПОД родителем и с явным пояснением —
+    // без этого она будет ставить и общее, и частное сразу, а у Denis'а это
+    // разные лекции: «как отрабатывать возражения» и «как отработать нет денег»
+    const tops = active.filter(function(p){ return !p.parent_key; });
     const list = active.length
-      ? active.map(function(p){ return `- ${p.key}: ${p.label}${p.description ? ' — ' + p.description : ''}`; }).join('\n')
+      ? tops.map(function(p){
+          let s = `- ${p.key}: ${p.label}${p.description ? ' — ' + p.description : ''}`;
+          childrenOf(p.key).forEach(function(c){
+            s += `\n    - ${c.key}: ${c.label} (частный случай «${p.label}»)${c.description ? ' — ' + c.description : ''}`;
+          });
+          return s;
+        }).join('\n')
       : '(справочник пока пуст)';
 
     const prompt = `Ты помогаешь Денису разметить его лекцию "${title||''}" для системы подбора персонального плана обучения.
@@ -2418,7 +2569,7 @@ ${tcList}
 ${transcript}
 ---
 
-СПРАВОЧНИК ПРОБЛЕМ КЛИЕНТА (то, с чем человек приходит):
+СПРАВОЧНИК ПРОБЛЕМ КЛИЕНТА (то, с чем человек приходит). Пункты с отступом — частные случаи того, под чем они стоят:
 ${list}
 
 Задача — определить:
@@ -2428,12 +2579,17 @@ ${list}
    - key: ключ из справочника
    - weight: "main" если занятие в основном про это, "touch" если задето вскользь
    - timecode: если в лекции есть чёткое место, где про это говорят — укажи в формате "МM:SS" или "Ч:MM:SS". Если момент размазан по всей лекции, оставь пустым.
+
+   ВАЖНО ПРО ОБЩЕЕ И ЧАСТНОЕ. Если занятие разбирает КОНКРЕТНЫЙ случай — ставь частный ключ, а общий НЕ ставь.
+   Если занятие про подход в целом, на разных примерах — ставь общий ключ, а частные НЕ ставь.
+   Ставить и общее, и частное одновременно можно только если занятие правда состоит из двух частей.
    Обычно у занятия 1-3 проблемы. Не отмечай всё подряд.
 
 2. new_problems: если занятие разбирает важную проблему клиента, которой В СПРАВОЧНИКЕ НЕТ — предложи её:
    - key: короткий латинский ключ в нижнем регистре (например price_objection)
    - label: как её назвал бы сам клиент, простыми словами
    - description: чем отличается от соседних проблем
+   - phase: на каком этапе пути она возникает — "search" (поиск клиентов), "qualify" (квалификация, понять кто перед тобой), "deal" (сама сделка), "retain" (удержание и повторные продажи), "self" (про самого продавца: страхи, дисциплина, состояние)
    Предлагай только если это правда отдельная проблема, а не синоним существующей. Если всё покрыто справочником — верни пустой список.
 
 3. level: кому подойдёт — "beginner" (начинающим), "mid" (уже что-то делает), "advanced" (продвинутым) или "any" (всем)
@@ -2464,6 +2620,9 @@ ${list}
       problems: (parsed.problems || []).filter(function(p){ return p && known.indexOf(p.key) !== -1; }),
       new_problems: (parsed.new_problems || []).filter(function(p){
         return p && /^[a-z0-9_]+$/.test(p.key || '') && known.indexOf(p.key) === -1;
+      }).map(function(p){
+        return { key:p.key, label:p.label || p.key, description:p.description || '',
+                 phase: okOne(p.phase, ['search','qualify','deal','retain','self']) || 'deal' };
       }),
       level: okOne(parsed.level, ['beginner','mid','advanced','any']),
       depth: okOne(parsed.depth, ['light','deep']),
