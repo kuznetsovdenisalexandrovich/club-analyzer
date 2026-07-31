@@ -204,6 +204,14 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 .pin-btn:active{transform:scale(0.94);background:var(--lav-dim)}
 .pin-btn.del{font-size:16px;color:var(--text-faint)}
 .pin-error{font-size:13px;color:var(--red);height:18px;text-align:center}
+
+.dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px}
+.dev-item{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:9px;cursor:pointer;transition:border-color .15s ease,background .15s ease}
+.dev-item.on{border-color:var(--accent);background:rgba(124,108,240,.07)}
+.dev-item input{margin-top:2px;flex:none}
+.dev-name{font-size:13px;font-weight:600;line-height:1.25}
+.dev-hint{font-size:11px;color:var(--text-faint);line-height:1.35;margin-top:2px}
 </style>
 </head>
 <body>
@@ -376,6 +384,17 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
         <div class="result-block">
           <div class="result-block-label">Ключевые темы</div>
           <div class="result-content" id="res-topics">—</div>
+        </div>
+        <div class="result-block">
+          <div class="result-block-label">
+            <span>Что развивает занятие</span>
+            <button class="export-btn" onclick="suggestDevelops()">Предложить</button>
+          </div>
+          <div class="note" style="margin-bottom:8px">Те же восемь сторон, по которым работает тест архетипов. По ним собирается личный план: слабая сторона участника → занятия, качающие её.</div>
+          <div id="develops-status" class="note"></div>
+          <div id="develops-list"></div>
+          <div class="result-block-label" style="margin-top:12px">Пояснение своими словами</div>
+          <textarea id="develops-note" class="tc-input" rows="2" oninput="onDevelopsNoteInput()" placeholder="Например: разбираем, как перестать соглашаться на скидку с первой просьбы"></textarea>
         </div>
       </div>
 
@@ -763,6 +782,10 @@ ${slugInstruction}
     document.getElementById('res-transcript').textContent = transcript;
     document.getElementById('res-topics').textContent = (card.topics||[]).map((t,i)=>`${i+1}. ${t}`).join('\n');
 
+    renderDevelops(card.develops || []);
+    const noteEl = document.getElementById('develops-note');
+    if (noteEl) noteEl.value = card.develops_note || '';
+
     const tagsEl = document.getElementById('res-tags');
     tagsEl.innerHTML = '';
     (card.tags||[]).forEach(t => {
@@ -1054,6 +1077,8 @@ ${tcList}
       key_insights: entry.key_insights || [],
       duration_minutes: entry.duration_minutes || null,
       transcript: entry.transcript || '',
+      develops: entry.develops || [],
+      develops_note: entry.develops_note || '',
     };
     const exists = await lectureExists(entry.slug);
     const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
@@ -1071,8 +1096,13 @@ ${tcList}
     if (!currentResult) return;
     if (document.getElementById('current-insights-list').querySelector('.tc-item')) {
       currentResult.key_insights = collectInsights('current-insights-list');
-      addToDict();
     }
+    // Отправляется запись из СЛОВАРЯ, а не то, что на экране — поэтому галочки
+    // и пояснение снимаем с формы и кладём в словарь прямо перед отправкой,
+    // иначе правки последней минуты просто не доедут
+    currentResult.develops = collectDevelops();
+    currentResult.develops_note = developsNote();
+    addToDict();
     const entry = dictionary.find(d => d.slug === currentResult.slug) || currentResult;
     try {
       const { ok, created } = await uploadEntryToDB(entry);
@@ -1594,6 +1624,123 @@ ${tcList}
     try { ok = sessionStorage.getItem('analyzer_pin_ok') === '1'; } catch(e) {}
     if (ok) { document.getElementById('pin-screen').classList.add('hidden'); }
   })();
+
+  /* ── Что развивает занятие ──────────────────────────────────────────────────
+     Восемь сторон = восемь полюсов четырёх осей теста архетипов в club-app.
+     Фиксированный список, а не свободный текст: по нему собирается личный план
+     (слабая сторона участника → занятия, качающие её). Свободный текст у сотни
+     лекций разъехался бы в синонимы, и сопоставить его с архетипом было бы нечем.
+     Ключи должны совпадать с DEVELOPS_KEYS на бэкенде. */
+
+  const DEVELOPS = [
+    { key:'logic',    name:'Логика и расчёт',        hint:'считать, анализировать, строить аргументацию на цифрах' },
+    { key:'emotion',  name:'Эмоция и контакт',       hint:'слышать, чувствовать, работать с состоянием клиента' },
+    { key:'press',    name:'Натиск и решительность', hint:'дожимать, ставить сроки, не бояться прямого разговора' },
+    { key:'patience', name:'Терпение и выдержка',    hint:'вести долгий цикл, не суетиться, выращивать отношения' },
+    { key:'scale',    name:'Масштаб и охват',        hint:'выходить на широкую аудиторию, мыслить потоками' },
+    { key:'focus',    name:'Фокус и точность',       hint:'выбирать цель, отсекать лишнее, не распыляться' },
+    { key:'system',   name:'Система и дисциплина',   hint:'строить процессы, регламенты, повторяемость' },
+    { key:'improv',   name:'Импровизация и креатив', hint:'выходить за скрипт, придумывать в моменте' },
+  ];
+
+  function renderDevelops(selected){
+    const el = document.getElementById('develops-list');
+    if (!el) return;
+    const on = selected || [];
+    el.innerHTML = '<div class="dev-grid">' + DEVELOPS.map(function(d){
+      const checked = on.indexOf(d.key) !== -1;
+      return '<label class="dev-item' + (checked ? ' on' : '') + '" data-key="' + d.key + '">'
+        + '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleDevelop(this)">'
+        + '<span><span class="dev-name">' + d.name + '</span>'
+        + '<span class="dev-hint">' + d.hint + '</span></span></label>';
+    }).join('') + '</div>';
+  }
+
+  function toggleDevelop(input){
+    const item = input.closest('.dev-item');
+    if (item) item.classList.toggle('on', input.checked);
+    if (currentResult) currentResult.develops = collectDevelops();
+  }
+
+  function collectDevelops(){
+    const out = [];
+    document.querySelectorAll('#develops-list .dev-item').forEach(function(it){
+      const cb = it.querySelector('input');
+      if (cb && cb.checked) out.push(it.getAttribute('data-key'));
+    });
+    return out;
+  }
+
+  function developsNote(){
+    const el = document.getElementById('develops-note');
+    return el ? el.value.trim() : '';
+  }
+
+  function onDevelopsNoteInput(){
+    if (currentResult) currentResult.develops_note = developsNote();
+  }
+
+  /* Автоподсказка от модели. Размечать вручную восемь десятков уже разобранных
+     лекций Denis реально не станет — а без разметки личный план собрать не из чего */
+  async function suggestDevelops(){
+    const key = document.getElementById('openai-key').value.trim();
+    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
+    if (!currentResult || !currentTranscript) { alert('Сначала проанализируй видео'); return; }
+    const statusEl = document.getElementById('develops-status');
+    statusEl.textContent = 'Смотрю, что качает это занятие...';
+    try {
+      const picked = await askDevelops(key, currentTranscript, currentResult.title);
+      currentResult.develops = picked;
+      renderDevelops(picked);
+      const names = picked.map(function(k){
+        const d = DEVELOPS.find(function(x){ return x.key === k; });
+        return d ? d.name : k;
+      });
+      statusEl.textContent = names.length
+        ? 'Предложено: ' + names.join(', ') + '. Поправь галочки, если не согласен.'
+        : 'Модель не выбрала ни одной стороны — отметь вручную.';
+    } catch(e){
+      statusEl.textContent = '';
+      alert(e.message);
+    }
+  }
+
+  async function askDevelops(apiKey, transcript, title){
+    const list = DEVELOPS.map(function(d){ return `- ${d.key}: ${d.name} — ${d.hint}`; }).join('\n');
+    const prompt = `Ты помогаешь Денису разметить его лекцию "${title||''}" для системы подбора персонального плана обучения.
+
+Транскрипт лекции:
+---
+${transcript}
+---
+
+Ниже восемь сторон продавца. Выбери те, которые это занятие РЕАЛЬНО развивает у слушателя:
+
+${list}
+
+Важно:
+- выбирай по СОДЕРЖАНИЮ занятия, а не по тому, что звучит красиво;
+- обычно подходит 1-3 стороны. Если занятие правда качает больше — бери больше, но не отмечай всё подряд;
+- если занятие организационное или ни одну сторону всерьёз не развивает, верни пустой список.
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"develops": ["system","focus"]}`;
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(function(){ return {}; });
+      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
+    }
+    const data = await r.json();
+    const clean = data.choices[0].message.content.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    const valid = DEVELOPS.map(function(d){ return d.key; });
+    // Модель может выдумать ключ — берём только те, что существуют
+    return (parsed.develops || []).filter(function(k){ return valid.indexOf(k) !== -1; });
+  }
 </script>
 </body>
 </html>
