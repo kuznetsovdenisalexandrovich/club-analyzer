@@ -71,6 +71,11 @@
   --lav:#9b8cf2; --lav-deep:#7c6cf0; --lav-dim:rgba(155,140,242,0.16);
   --peach:#ffb199; --mint:#8fe3c0; --coral:#ff8fa3;
   --green:#3ecf8e; --red:#ff453a;
+  /* Оранжевый акцент главных действий — тот же брендовый цвет, что в club-app.
+     Раньше var(--accent) использовался, но нигде не объявлялся: правило с
+     несуществующей переменной браузер отбрасывает целиком, и элемент оставался
+     без фона или без рамки */
+  --accent:#e8614a; --accent-deep:#cf4f39;
   --disp:'Unbounded',sans-serif; --body:'Manrope',sans-serif;
   --safe-top: env(safe-area-inset-top); /* JS переопределит на реальный safeAreaInset+contentSafeAreaInset Telegram, если доступно */
 }
@@ -135,7 +140,7 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 .file-name{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file-size{color:var(--text-faint)}
 
-.btn-primary{width:100%;padding:14px;border-radius:14px;background:var(--lav-deep);color:white;font-family:var(--disp);font-weight:700;font-size:13px;border:none;cursor:pointer;transition:opacity .15s}
+.btn-primary{width:100%;padding:14px;border-radius:14px;background:var(--accent);color:white;font-family:var(--disp);font-weight:700;font-size:13px;border:none;cursor:pointer;transition:opacity .15s}
 .btn-primary:active{opacity:.8}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed}
 
@@ -206,9 +211,9 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 .pin-error{font-size:13px;color:var(--red);height:18px;text-align:center}
 
 .dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px}
-.dev-item{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border:1px solid var(--border);
+.dev-item{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border:1px solid var(--line);
   border-radius:9px;cursor:pointer;transition:border-color .15s ease,background .15s ease}
-.dev-item.on{border-color:var(--accent);background:rgba(124,108,240,.07)}
+.dev-item.on{border-color:var(--accent);background:rgba(232,97,74,.09)}
 .dev-item input{margin-top:2px;flex:none}
 .dev-name{font-size:13px;font-weight:600;line-height:1.25}
 .dev-hint{font-size:11px;color:var(--text-faint);line-height:1.35;margin-top:2px}
