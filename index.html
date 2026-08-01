@@ -97,7 +97,7 @@ body{
 .blob-3{width:200px;height:200px;top:40%;right:-60px;background:var(--mint);opacity:var(--blob2-op)}
 .shell{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 16px}
 
-header{padding:calc(var(--safe-top) + 14px) 0 20px;display:flex;align-items:center;justify-content:space-between}
+header{padding:calc(max(var(--safe-top), 8px) + 22px) 0 20px;display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;align-items:center;gap:10px}
 .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--lav),var(--coral));display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:900;font-size:13px;color:white;box-shadow:0 6px 16px -4px rgba(155,140,242,0.45)}
 .brand-name{font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:-.01em}
@@ -640,6 +640,18 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
       <div class="card-title"><span class="step-num">!</span> Предложено моделью</div>
       <div class="note" style="margin-bottom:10px">Модель встретила это при разметке и не нашла подходящего пункта. Прими, если это правда новая проблема, или склей с существующей.</div>
       <div id="pr-suggested-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">4</span> Что просят участники</span>
+        <button class="btn btn-sm" onclick="loadPlanDemand()">Обновить</button>
+      </div>
+      <div class="note" style="line-height:1.5">
+        Ответы из анкеты личного плана. Сверху то, что выбирают, но по чему нет ни одной
+        лекции — это не дыра, а подсказка, что стоит снять.
+      </div>
+      <div id="demand-body" style="margin-top:12px"><div class="empty-dict">Нажми «Обновить»</div></div>
     </div>
 
     <div class="card">
@@ -2066,6 +2078,78 @@ ${tcList}
   /* ── Редактор направлений ─────────────────────────────────────────────────
      Ключ задаётся один раз: на него ссылается Problem.phase. Удаления нет —
      только «скрыть», иначе проблемы внутри осиротеют. */
+
+  /* ── Что просят участники ─────────────────────────────────────────────────
+     Спрос из анкеты личного плана против того, что есть в библиотеке.
+     Свободные ответы читаются глазами — там темы, которых нет в справочнике. */
+
+  async function loadPlanDemand(){
+    const el = document.getElementById('demand-body');
+    if (!el) return;
+    el.innerHTML = '<div class="empty-dict">Загружаю...</div>';
+    try {
+      const r = await fetch(`${API_URL}/plan-answers/admin/summary?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      if (!r.ok) throw new Error('сервер ответил ' + r.status);
+      renderPlanDemand(await r.json());
+    } catch(e){
+      el.innerHTML = '<div class="empty-dict">Не удалось загрузить: ' + prEsc(e.message) + '</div>';
+    }
+  }
+
+  function renderPlanDemand(d){
+    const el = document.getElementById('demand-body');
+    if (!el) return;
+    if (!d.answers_total){
+      el.innerHTML = '<div class="empty-dict">Анкету пока никто не проходил</div>';
+      return;
+    }
+
+    const LVL = { beginner:'только начинает', mid:'учили, но не уверен', advanced:'в теме, хочет выше' };
+    const DPT = { light:'только самое важное', deep:'как следует' };
+    const counts = function(obj, names){
+      return Object.keys(obj || {}).map(function(k){
+        return (names[k] || k) + ' — ' + obj[k];
+      }).join(' · ');
+    };
+
+    let html = '<div class="note" style="margin-bottom:10px">Прошли анкету: <b>' + d.answers_total + '</b>'
+      + (Object.keys(d.levels || {}).length ? '<br>Уровень: ' + prEsc(counts(d.levels, LVL)) : '')
+      + (Object.keys(d.depths || {}).length ? '<br>Глубина: ' + prEsc(counts(d.depths, DPT)) : '')
+      + '</div>';
+
+    // Только то, что реально выбирали — остальное это весь справочник заново
+    const asked = (d.items || []).filter(function(i){ return i.demand > 0; });
+    if (asked.length){
+      html += asked.map(function(i){
+        const gap = !i.lectures_main && !i.lectures_touch;
+        return '<div class="card" style="margin-bottom:8px' + (gap ? ';border-color:var(--warm,#e8614a)' : '') + '">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">'
+            + '<div style="font-size:13px;font-weight:600">' + prEsc(i.label) + '</div>'
+            + '<div style="font-size:13px;font-weight:700">' + i.demand + '</div>'
+          + '</div>'
+          + '<div class="note">лекций: основных ' + i.lectures_main + ', вскользь ' + i.lectures_touch
+            + (gap ? ' — <b>просят, а показать нечего</b>' : '') + '</div>'
+        + '</div>';
+      }).join('');
+    } else {
+      html += '<div class="empty-dict">Проблемы пока никто не отмечал</div>';
+    }
+
+    if ((d.notes || []).length){
+      html += '<div class="result-block-label" style="margin:18px 0 8px">Написали своими словами</div>';
+      html += d.notes.map(function(n){
+        const who = n.name ? prEsc(n.name) : ('id ' + n.telegram_id);
+        const picked = (n.problems || []).map(function(k){ return problemLabel(k); }).join(', ');
+        return '<div class="card" style="margin-bottom:8px">'
+          + '<div style="font-size:13px;line-height:1.5">' + prEsc(n.note) + '</div>'
+          + '<div class="note" style="margin-top:6px">' + who
+            + (picked ? ' · выбрал: ' + prEsc(picked) : '') + '</div>'
+        + '</div>';
+      }).join('');
+    }
+
+    el.innerHTML = html;
+  }
 
   function togglePhasesEditor(){
     const el = document.getElementById('ph-list');
