@@ -2292,6 +2292,21 @@ ${tcList}
       + '</div>'
       + '<div class="field"><label>Порядок в списке</label>'
       + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-order-' + prEsc(key) + '" value="' + (p.sort_order||100) + '"></div>'
+      + '<div class="result-block-label" style="margin:16px 0 8px">На поле выбора</div>'
+      + '<div class="note" style="margin-bottom:8px">Так тема ведёт себя на экране, где участник собирает свой план. Корневые видны сразу, остальные выплывают после тапа: частные случаи вниз, соседние вбок.</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+        + '<div class="field" style="flex:1;min-width:150px"><label>Видна сразу (тема-дверь)</label>'
+        + '<select id="pr-root-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
+        + '<option value="0"' + (p.is_root ? '' : ' selected') + '>нет, выплывает после тапа</option>'
+        + '<option value="1"' + (p.is_root ? ' selected' : '') + '>да, видна с самого начала</option>'
+        + '</select></div>'
+        + '<div class="field" style="flex:1;min-width:120px"><label>Порядок среди корневых</label>'
+        + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-rorder-' + prEsc(key) + '" value="' + (p.root_order||100) + '"></div>'
+      + '</div>'
+      + '<div class="field"><label>Показать рядом после выбора</label>'
+      + '<div class="note" style="margin-bottom:6px">Соседние темы — «кому интересно это, тому зайдёт и вот это». Частные случаи сюда добавлять не нужно, они и так раскрываются.</div>'
+      + '<div id="pr-rel-' + prEsc(key) + '">' + relatedPickerHtml(key, p.related || []) + '</div>'
+      + '</div>'
       + '<div class="note" id="pr-st-' + prEsc(key) + '"></div>'
       + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
         + '<button class="btn-primary" style="flex:1" onclick="saveProblem(' + jsArg(key) + ')">Сохранить</button>'
@@ -2347,6 +2362,42 @@ ${tcList}
     } catch(e){ statusEl.textContent = e.message; }
   }
 
+  /* Соседние темы выбираются чипами, а не мультиселектом: мультиселект на
+     телефоне неудобен, а список тут короткий. Состояние держим прямо в DOM
+     (класс on), чтобы не заводить ещё одну переменную на каждую проблему */
+  const relatedDraft = {};
+
+  function relatedPickerHtml(key, current){
+    relatedDraft[key] = (current || []).slice();
+    const cand = activeProblems().filter(function(p){
+      // Себя и своих детей в соседи не предлагаем — дети раскрываются сами
+      return p.key !== key && p.parent_key !== key;
+    });
+    if (!cand.length) return '<div class="note">Пока не из чего выбирать</div>';
+    return '<div style="display:flex;flex-wrap:wrap;gap:6px">'
+      + cand.map(function(c){
+          const on = relatedDraft[key].indexOf(c.key) !== -1;
+          return '<button class="btn btn-sm' + (on ? ' active' : '') + '"'
+            + ' id="prrel-' + prEsc(key) + '-' + prEsc(c.key) + '"'
+            + ' style="' + (on ? 'border-color:var(--accent);color:var(--accent)' : '') + '"'
+            + ' onclick="toggleRelated(' + jsArg(key) + ',' + jsArg(c.key) + ')">'
+            + prEsc(c.label) + '</button>';
+        }).join('')
+      + '</div>';
+  }
+
+  function toggleRelated(key, relKey){
+    const list = relatedDraft[key] || (relatedDraft[key] = []);
+    const i = list.indexOf(relKey);
+    if (i === -1) list.push(relKey); else list.splice(i, 1);
+    const btn = document.getElementById('prrel-' + key + '-' + relKey);
+    if (btn){
+      const on = i === -1;
+      btn.style.borderColor = on ? 'var(--accent)' : '';
+      btn.style.color = on ? 'var(--accent)' : '';
+    }
+  }
+
   async function saveProblem(key){
     const p = problemsAll.find(function(x){ return x.key === key; });
     const statusEl = document.getElementById('pr-st-' + key);
@@ -2358,6 +2409,9 @@ ${tcList}
         description: (document.getElementById('pr-desc-' + key).value || '').trim(),
         phase: (document.getElementById('pr-phase-' + key) || {}).value || p.phase || 'deal',
         parent_key: (document.getElementById('pr-parent-' + key) || {}).value || '',
+        is_root: (document.getElementById('pr-root-' + key) || {}).value === '1',
+        root_order: parseInt((document.getElementById('pr-rorder-' + key) || {}).value, 10) || 100,
+        related: relatedDraft[key] || p.related || [],
         sort_order: parseInt(document.getElementById('pr-order-' + key).value, 10) || 100,
         status: p.status,
       }, statusEl);
@@ -2371,6 +2425,8 @@ ${tcList}
     try {
       await saveProblemRow({ key: key, label: p.label, description: p.description,
                              phase: p.phase || 'deal', parent_key: p.parent_key || '',
+                             is_root: !!p.is_root, root_order: p.root_order || 100,
+                             related: p.related || [],
                              sort_order: p.sort_order || 100, status: 'active' }, null);
       await loadProblemsAdmin();
     } catch(e){ alert(e.message); }
@@ -2383,6 +2439,8 @@ ${tcList}
     try {
       await saveProblemRow({ key: key, label: p.label, description: p.description,
                              phase: p.phase || 'deal', parent_key: p.parent_key || '',
+                             is_root: !!p.is_root, root_order: p.root_order || 100,
+                             related: p.related || [],
                              sort_order: p.sort_order || 100, status: 'archived' }, null);
       await loadProblemsAdmin();
     } catch(e){ alert(e.message); }
