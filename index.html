@@ -190,6 +190,23 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 .tc-text{font-size:13px;line-height:1.5}
 
 .empty-dict{text-align:center;padding:24px;font-size:13px;color:var(--text-faint)}
+/* Компактная строка для перетаскивания порядка. Отдельный режим, а не drag
+   прямо по карточкам-формам: тащить карточку с полями ввода неудобно, курсор
+   всё время попадает в текст */
+.sort-row{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;
+  border:1px solid var(--line);border-radius:10px;background:var(--input-bg);
+  font-size:13px;cursor:grab;user-select:none}
+.sort-row.dragging{opacity:.4;cursor:grabbing}
+.sort-row .sort-handle{opacity:.4;font-size:15px;letter-spacing:-2px;flex-shrink:0}
+.sort-row .sort-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sort-row .sort-btn{padding:2px 8px;font-size:13px;line-height:1.2;flex-shrink:0}
+/* Метка состояния транскрипта */
+.hp-badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;
+  font-weight:600;flex-shrink:0}
+.hp-3{background:#e8564722;color:#c0392b}
+.hp-2{background:#e8a63322;color:#b47a10}
+.hp-1{background:#7a7a7a22;color:var(--text-faint)}
+.hp-0{background:#3aa15722;color:#2e7d4f}
 .dict-table{width:100%;border-collapse:collapse;font-size:12px}
 .dict-table th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);padding:6px 8px;border-bottom:1px solid var(--line)}
 .dict-table td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -529,6 +546,23 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
       <div id="bulk-log" style="margin-top:8px;max-height:240px;overflow:auto"></div>
     </div>
 
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">4</span> Проверка транскриптов</span>
+        <button class="btn btn-sm" onclick="runHealthCheck()">Проверить</button>
+      </div>
+      <div class="note" style="line-height:1.5">
+        Ищет лекции, у которых транскрипт оборвался раньше конца записи. Такие лекции опаснее
+        неразмеченных: разметка по обрубку выглядит нормальной, но модель не видела вторую половину —
+        и таймкод «про это на 12:00» ведёт в пустоту.<br><br>
+        Самая надёжная опора — проставленная длительность. У новых лекций она теперь берётся
+        автоматически из Whisper; у старых её чаще всего нет, и тогда лекция сравнивается
+        с соседями по потоку — это уже догадка, но выбросы видно хорошо.
+      </div>
+      <div class="note" id="hp-status" style="margin-top:10px">Ещё не проверялось</div>
+      <div id="hp-body" style="margin-top:8px"></div>
+    </div>
+
     <div id="lib-list"></div>
   </div>
 
@@ -860,6 +894,10 @@ ${slugInstruction}
       card.link_vk = linkVk || '';
       card.file    = file.name;
       card.created = new Date().toISOString().slice(0,10);
+      // Реальная длительность записи. Whisper отдаёт её в verbose_json, но
+      // раньше она никуда не сохранялась — и проверить, не оборвался ли
+      // транскрипт на середине лекции, было попросту не с чем сравнить
+      card.duration_minutes = wData.duration ? Math.max(1, Math.round(wData.duration / 60)) : null;
       card._transcript = transcript;
 
       currentResult    = card;
@@ -1449,6 +1487,270 @@ ${tcList}
     }
   }
 
+  /* ══ Проверка транскриптов ════════════════════════════════════════════════
+     Битый транскрипт молчит: разметка по нему проходит, счётчики растут, а
+     половины лекции модель просто не видела. Ловим сравнением того, сколько
+     минут покрывает транскрипт, с тем, сколько записи было на самом деле.
+
+     Длительность есть не у всех: раньше она заполнялась только руками. У новых
+     лекций берётся из Whisper автоматически, у старых опора — соседи по потоку
+     (лекции одного потока обычно сопоставимой длины). Это догадка, поэтому
+     такие случаи помечаются мягче, чем расхождение с явной длительностью. */
+
+  const CHARS_PER_MIN = 800;      // живая русская речь, порядок величины
+  let healthRows = [];
+  let healthOnlyBad = true;
+
+  function tcMinutes(t){
+    const raw = String(t == null ? '' : t).trim();
+    if (!raw) return 0;
+    const parts = raw.split(':').map(function(x){ return parseInt(x, 10); });
+    if (parts.some(function(n){ return isNaN(n); })) return 0;
+    if (parts.length === 3) return parts[0]*60 + parts[1] + parts[2]/60;
+    if (parts.length === 2) return parts[0] + parts[1]/60;
+    return 0;
+  }
+
+  // Докуда физически дотянулся транскрипт. Таймкоды и мысли выжимки строятся
+  // из него же, поэтому самая поздняя метка и есть край покрытия
+  function coverageMinutes(l){
+    let m = 0;
+    (l.timecodes || []).forEach(function(t){ m = Math.max(m, tcMinutes(t.time)); });
+    (l.key_insights || []).forEach(function(k){ m = Math.max(m, tcMinutes(k.timecode)); });
+    return m;
+  }
+
+  function medianOf(arr){
+    const a = arr.filter(function(n){ return n > 0; }).sort(function(x, y){ return x - y; });
+    if (!a.length) return 0;
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : Math.round((a[mid-1] + a[mid]) / 2);
+  }
+
+  function checkOneLecture(l, medianChars){
+    const chars = (l.transcript || '').length;
+    const cover = coverageMinutes(l);
+    const dur   = l.duration_minutes || 0;
+    const r = { slug: l.slug, title: l.title || l.slug, chars: chars, cover: cover, dur: dur };
+
+    if (!chars){
+      r.level = 3; r.text = 'Транскрипта нет вообще — размечать нечем';
+      return r;
+    }
+    // Явная длительность — единственный честный эталон
+    if (dur && cover && cover < dur * 0.6){
+      r.level = 3;
+      r.text = 'Транскрипт кончается на ' + Math.round(cover) + '-й минуте, а запись длится ' + dur + ' мин';
+      return r;
+    }
+    if (dur && chars < dur * CHARS_PER_MIN * 0.45){
+      r.level = 3;
+      r.text = 'Для ' + dur + ' мин записи текста примерно вдвое меньше нормы';
+      return r;
+    }
+    if (chars < 3000){
+      r.level = 2;
+      r.text = 'Очень короткий текст — около ' + Math.max(1, Math.round(chars / CHARS_PER_MIN)) + ' мин речи';
+      return r;
+    }
+    // Длительности нет — сравниваем с потоком. Это уже догадка
+    if (!dur && medianChars && chars < medianChars * 0.4){
+      r.level = 2;
+      r.text = 'Втрое короче соседей по потоку — похоже на обрыв, но длительность не проставлена';
+      return r;
+    }
+    if (!dur){
+      r.level = 1;
+      r.text = 'Сверить не с чем: длительность не проставлена' + (medianChars ? '' : ', соседей по потоку нет');
+      return r;
+    }
+    r.level = 0;
+    r.text = 'Похоже на полный: ' + Math.round(cover || chars / CHARS_PER_MIN) + ' мин из ' + dur;
+    return r;
+  }
+
+  function runHealthCheck(){
+    const statusEl = document.getElementById('hp-status');
+    if (!libraryLoaded || !libraryLectures.length){
+      if (statusEl) statusEl.textContent = 'Сначала загрузи лекции из базы (шаг 2)';
+      return;
+    }
+    const byStream = {};
+    libraryLectures.forEach(function(l){
+      const k = streamPrefixOf(l.slug);
+      (byStream[k] = byStream[k] || []).push((l.transcript || '').length);
+    });
+    const medians = {};
+    Object.keys(byStream).forEach(function(k){
+      // Медиана по одному-двум соседям ничего не значит — не выдаём её за эталон
+      medians[k] = byStream[k].length >= 3 ? medianOf(byStream[k]) : 0;
+    });
+    healthRows = libraryLectures
+      .map(function(l){ return checkOneLecture(l, medians[streamPrefixOf(l.slug)] || 0); })
+      .sort(function(a, b){ return (b.level - a.level) || (a.chars - b.chars); });
+    renderHealth();
+  }
+
+  function renderHealth(){
+    const statusEl = document.getElementById('hp-status');
+    const el = document.getElementById('hp-body');
+    if (!el) return;
+    const bad  = healthRows.filter(function(r){ return r.level === 3; }).length;
+    const warn = healthRows.filter(function(r){ return r.level === 2; }).length;
+    const unk  = healthRows.filter(function(r){ return r.level === 1; }).length;
+    if (statusEl){
+      statusEl.textContent = 'Проверено ' + healthRows.length + ': битых ' + bad
+        + ', подозрительных ' + warn + ', нечем сверить ' + unk
+        + ', в порядке ' + (healthRows.length - bad - warn - unk);
+    }
+    const rows = healthOnlyBad
+      ? healthRows.filter(function(r){ return r.level >= 2; })
+      : healthRows;
+    const toggle = '<button class="btn btn-sm" onclick="toggleHealthScope()" style="margin-bottom:10px">'
+      + (healthOnlyBad ? 'Показать все лекции' : 'Только проблемные') + '</button>';
+    if (!rows.length){
+      el.innerHTML = toggle + '<div class="empty-dict">Ничего подозрительного не нашлось</div>';
+      return;
+    }
+    el.innerHTML = toggle + rows.map(function(r){
+      const nums = r.chars.toLocaleString('ru-RU') + ' знаков'
+        + (r.cover ? ' · покрывает ' + Math.round(r.cover) + ' мин' : ' · таймкодов нет')
+        + (r.dur ? ' · длительность ' + r.dur + ' мин' : ' · длительность не указана');
+      const badge = r.level === 3 ? 'битый' : r.level === 2 ? 'подозрительный' : r.level === 1 ? 'не сверить' : 'ок';
+      return '<div class="card" style="margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+          + '<div style="flex:1;min-width:0">'
+            + '<div style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px">'
+              + '<span class="hp-badge hp-' + r.level + '">' + badge + '</span>'
+              + '<span style="flex:1;min-width:0">' + prEsc(r.title) + '</span></div>'
+            + '<div class="note" style="margin-top:4px">' + prEsc(r.text) + '</div>'
+            + '<div class="note" style="margin-top:2px;opacity:.7">' + prEsc(r.slug) + ' · ' + nums + '</div>'
+          + '</div>'
+          + '<button class="btn btn-sm" onclick="focusLecture(' + jsArg(r.slug) + ')" style="flex-shrink:0">Открыть</button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function toggleHealthScope(){
+    healthOnlyBad = !healthOnlyBad;
+    renderHealth();
+  }
+
+  // Прыжок к карточке лекции из отчёта. Фильтр потока сбрасываем: лекция может
+  // лежать не в том потоке, который сейчас открыт, и иначе её просто нет на экране
+  function focusLecture(slug){
+    libActiveStream = 'all';
+    renderStreamTabs();
+    renderLibraryList();
+    const card = document.getElementById('lib-card-' + slug);
+    if (!card) return;
+    const ed = document.getElementById('lib-card-editor-' + slug);
+    if (ed && ed.style.display === 'none') toggleLibCardEditor(slug);
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /* ══ Перетаскивание порядка ═══════════════════════════════════════════════
+     Отдельный компактный режим, а не drag прямо по карточкам-формам: тащить
+     карточку с полями ввода неудобно — курсор всё время попадает в текст.
+     Кнопки ↑/↓ рядом с ручкой обязательны: на телефоне перетаскивание
+     HTML5-драгом не работает вовсе.
+
+     Каждый список ПЛОСКИЙ и однородный (только направления, только темы
+     верхнего уровня одного направления, только частные случаи одного
+     родителя) — тогда «подвинуть» не значит «утащить ребёнка от родителя». */
+
+  let sortDragged = null;
+  let openSortScope = '';     // какой список порядка сейчас раскрыт
+
+  function sortRowHtml(key, label, note){
+    return '<div class="sort-row" draggable="true" data-key="' + prEsc(key) + '"'
+      + ' ondragstart="sortDragStart(event,this)"'
+      + ' ondragover="sortDragOver(event,this)"'
+      + ' ondragend="sortDragEnd(event,this)">'
+      + '<span class="sort-handle">⋮⋮</span>'
+      + '<span class="sort-name">' + prEsc(label) + '</span>'
+      + (note ? '<span class="note" style="margin:0;flex-shrink:0">' + prEsc(note) + '</span>' : '')
+      + '<button class="btn btn-sm sort-btn" onclick="sortMove(this,-1)">↑</button>'
+      + '<button class="btn btn-sm sort-btn" onclick="sortMove(this,1)">↓</button>'
+      + '</div>';
+  }
+
+  function sortListHtml(scope, items, hint){
+    return '<div class="sort-list" id="sortlist-' + prEsc(scope) + '" data-scope="' + prEsc(scope) + '">'
+      + items.map(function(it){ return sortRowHtml(it.key, it.label, it.note || ''); }).join('')
+      + '</div>'
+      + '<div class="note" id="sortst-' + prEsc(scope) + '">' + prEsc(hint || 'Тяни за строку или жми стрелки — порядок сохраняется сразу') + '</div>';
+  }
+
+  function sortDragStart(e, row){
+    sortDragged = row;
+    row.classList.add('dragging');
+    if (e.dataTransfer){
+      e.dataTransfer.effectAllowed = 'move';
+      // Без setData перетаскивание не стартует в части браузеров
+      try { e.dataTransfer.setData('text/plain', row.dataset.key || ''); } catch(err){}
+    }
+  }
+
+  function sortDragOver(e, row){
+    if (!sortDragged || sortDragged === row) return;
+    // Переставляем только внутри своего списка — чужой порядок не трогаем
+    if (sortDragged.parentNode !== row.parentNode) return;
+    e.preventDefault();
+    const box = row.getBoundingClientRect();
+    const after = (e.clientY - box.top) > box.height / 2;
+    row.parentNode.insertBefore(sortDragged, after ? row.nextSibling : row);
+  }
+
+  function sortDragEnd(e, row){
+    if (sortDragged) sortDragged.classList.remove('dragging');
+    const list = row.parentNode;
+    sortDragged = null;
+    commitSortOrder(list);
+  }
+
+  function sortMove(btn, dir){
+    const row = btn.closest ? btn.closest('.sort-row') : null;
+    if (!row) return;
+    const list = row.parentNode;
+    if (dir < 0 && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+    else if (dir > 0 && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+    else return;
+    commitSortOrder(list);
+  }
+
+  // Отправляем ВЕСЬ список целиком, а не «этот сдвинулся на одну позицию»:
+  // так порядок не разъедется, если два перетаскивания подряд обгонят друг друга
+  async function commitSortOrder(list){
+    if (!list) return;
+    const scope = list.dataset.scope || '';
+    const keys = Array.prototype.slice.call(list.querySelectorAll('.sort-row'))
+      .map(function(r){ return r.dataset.key; });
+    const st = document.getElementById('sortst-' + scope);
+    if (st) st.textContent = 'Сохраняю порядок...';
+    const url = scope === 'phases'
+      ? `${API_URL}/phases/admin/reorder`
+      : `${API_URL}/problems/admin/reorder`;
+    try {
+      const r = await fetch(`${url}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: keys }),
+      });
+      const data = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(data.detail || ('сервер ответил ' + r.status));
+      // Держим локальные копии в согласии с базой, иначе следующая перерисовка
+      // разложит всё обратно по старым числам
+      const target = scope === 'phases' ? PHASES : problemsAll;
+      keys.forEach(function(k, i){
+        const row = target.find(function(x){ return x.key === k; });
+        if (row) row.sort_order = (i + 1) * 10;
+      });
+      if (st) st.textContent = 'Порядок сохранён';
+    } catch(err){
+      if (st) st.textContent = 'Не удалось сохранить: ' + err.message;
+    }
+  }
+
   function renderLibraryList() {
     const el = document.getElementById('lib-list');
     let rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
@@ -1465,6 +1767,14 @@ ${tcList}
       const markLine = marked
         ? `<div class="note" style="margin-top:2px">🎯 ${marked}</div>`
         : `<div class="note" style="margin-top:2px;opacity:.6">не размечено</div>`;
+      // Размер транскрипта прямо в строке — обрыв заметен и без отдельной проверки
+      const trChars = (l.transcript || '').length;
+      const trCover = coverageMinutes(l);
+      const sizeLine = `<div class="note" style="margin-top:2px;opacity:.55">`
+        + (trChars ? trChars.toLocaleString('ru-RU') + ' знаков' : 'транскрипта нет')
+        + (trCover ? ' · покрывает ' + Math.round(trCover) + ' мин' : '')
+        + (l.duration_minutes ? ' · запись ' + l.duration_minutes + ' мин' : '')
+        + `</div>`;
       return `<div class="card" id="lib-card-${l.slug}">
         <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;gap:8px">
           <span style="font-size:13px">${l.title}</span>
@@ -1475,6 +1785,7 @@ ${tcList}
         </div>
         <div class="note">${l.slug} · ${(l.tags||[]).map(t=>'#'+t).join(' ')}</div>
         ${markLine}
+        ${sizeLine}
 
         <div id="lib-card-editor-${l.slug}" style="display:none;margin-top:14px"></div>
 
@@ -2042,8 +2353,20 @@ ${tcList}
               + (empty ? ' — <b>нет ни одной лекции</b>' : '')
               + (kids.length ? ' · частных случаев: ' + kids.length : '') + '</div>'
           + '</div>'
-          + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + jsArg(p.key) + ')">Править</button>'
+          + '<span style="display:flex;gap:6px;flex-shrink:0">'
+            + (!isChild && kids.length > 1
+                ? '<button class="btn btn-sm" onclick="toggleSortScope(' + jsArg('kids:' + p.key) + ')">Порядок внутри</button>'
+                : '')
+            + '<button class="btn btn-sm" onclick="toggleProblemEditor(' + jsArg(p.key) + ')">Править</button>'
+          + '</span>'
         + '</div>'
+        + (!isChild && openSortScope === 'kids:' + p.key
+            ? '<div style="margin-top:12px">'
+              + sortListHtml('kids:' + p.key, kids.map(function(c){
+                  return { key: c.key, label: c.label || c.key };
+                }), 'Порядок частных случаев внутри этой темы')
+              + '</div>'
+            : '')
         + '<div id="pr-editor-' + prEsc(p.key) + '" style="display:none;margin-top:12px"></div>'
         + '</div>';
     };
@@ -2052,7 +2375,19 @@ ${tcList}
     PHASES.forEach(function(ph){
       const inPhase = rows.filter(function(p){ return (p.phase || 'deal') === ph.key && !p.parent_key; });
       if (!inPhase.length) return;
-      html += '<div class="result-block-label" style="margin:16px 0 8px">' + ph.name + '</div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:16px 0 8px">'
+        + '<div class="result-block-label" style="margin:0">' + prEsc(ph.name) + '</div>'
+        + (inPhase.length > 1
+            ? '<button class="btn btn-sm" onclick="toggleSortScope(' + jsArg('ph:' + ph.key) + ')">Порядок</button>'
+            : '')
+        + '</div>';
+      if (openSortScope === 'ph:' + ph.key){
+        html += '<div class="card" style="margin-bottom:10px">'
+          + sortListHtml('ph:' + ph.key, inPhase.map(function(p){
+              return { key: p.key, label: p.label || p.key };
+            }), 'Порядок тем внутри направления. Частные случаи всегда идут следом за своей темой.')
+          + '</div>';
+      }
       inPhase.forEach(function(p){
         html += cardHtml(p, false);
         // Частные случаи идут сразу под родителем, даже если у них своя фаза
@@ -2073,6 +2408,13 @@ ${tcList}
     }
 
     listEl.innerHTML = html;
+  }
+
+  // Раскрыт всегда ровно один список порядка: два открытых рядом путают, какой
+  // именно из них сейчас сохранится
+  function toggleSortScope(scope){
+    openSortScope = (openSortScope === scope) ? '' : scope;
+    renderProblems();
   }
 
   /* ── Редактор направлений ─────────────────────────────────────────────────
@@ -2167,15 +2509,24 @@ ${tcList}
       if (p.status === 'archived') return;
       counts[p.phase || ''] = (counts[p.phase || ''] || 0) + 1;
     });
-    el.innerHTML = PHASES.map(function(f){
+    // Порядок направлений — это ещё и порядок дверей на поле выбора у участника,
+    // поэтому он тут первым блоком, а не спрятан числом внутри каждой карточки
+    const orderBlock = '<div class="card" style="margin-bottom:14px">'
+      + '<div class="card-title">Порядок направлений</div>'
+      + '<div class="note" style="margin-bottom:10px">В этом порядке разделы идут и здесь, и у участника на поле выбора тем.</div>'
+      + sortListHtml('phases', PHASES.map(function(f){
+          return { key: f.key, label: f.name || f.key,
+                   note: (counts[f.key] || 0) + ' тем' + (f.active === false ? ' · скрыто' : '') };
+        }))
+      + '</div>';
+
+    el.innerHTML = orderBlock + PHASES.map(function(f){
       return '<div class="card" style="margin-bottom:10px' + (f.active === false ? ';opacity:.55' : '') + '">'
         + '<div class="field"><label>Название — коротким существительным</label>'
         + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-label-' + prEsc(f.key) + '" value="' + prEsc(f.name) + '"></div>'
         + '<div class="field"><label>Пояснение для модели — чем этот раздел отличается</label>'
         + '<textarea id="ph-desc-' + prEsc(f.key) + '" class="tc-input" rows="2">' + prEsc(f.description || '') + '</textarea></div>'
         + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
-          + '<div class="field" style="flex:1;min-width:120px"><label>Порядок</label>'
-          + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-order-' + prEsc(f.key) + '" value="' + (f.sort_order || 100) + '"></div>'
           + '<div class="field" style="flex:1;min-width:150px"><label>Показывать участнику</label>'
           + '<select id="ph-active-' + prEsc(f.key) + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
           + '<option value="1"' + (f.active !== false ? ' selected' : '') + '>да</option>'
@@ -2220,7 +2571,8 @@ ${tcList}
         key: key,
         label: (document.getElementById('ph-label-' + key).value || '').trim() || key,
         description: (document.getElementById('ph-desc-' + key).value || '').trim(),
-        sort_order: parseInt(document.getElementById('ph-order-' + key).value, 10) || 100,
+        // порядок задаётся перетаскиванием отдельным запросом — здесь его не трогаем
+        sort_order: (PHASES.find(function(f){ return f.key === key; }) || {}).sort_order || 100,
         active: !willHide,
       }, null);
       PHASES = [];                 // перечитываем, иначе на экране останется старое название
@@ -2293,16 +2645,7 @@ ${tcList}
       + '<div class="field"><label>Порядок в списке</label>'
       + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-order-' + prEsc(key) + '" value="' + (p.sort_order||100) + '"></div>'
       + '<div class="result-block-label" style="margin:16px 0 8px">На поле выбора</div>'
-      + '<div class="note" style="margin-bottom:8px">Так тема ведёт себя на экране, где участник собирает свой план. Корневые видны сразу, остальные выплывают после тапа: частные случаи вниз, соседние вбок.</div>'
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
-        + '<div class="field" style="flex:1;min-width:150px"><label>Видна сразу (тема-дверь)</label>'
-        + '<select id="pr-root-' + prEsc(key) + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
-        + '<option value="0"' + (p.is_root ? '' : ' selected') + '>нет, выплывает после тапа</option>'
-        + '<option value="1"' + (p.is_root ? ' selected' : '') + '>да, видна с самого начала</option>'
-        + '</select></div>'
-        + '<div class="field" style="flex:1;min-width:120px"><label>Порядок среди корневых</label>'
-        + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="pr-rorder-' + prEsc(key) + '" value="' + (p.root_order||100) + '"></div>'
-      + '</div>'
+      + '<div class="note" style="margin-bottom:8px">Дверями на поле служат НАПРАВЛЕНИЯ (правятся в блоке 1 выше), а не отдельные темы — направление раскрывается, и из него вырастают темы этой фазы. Здесь можно только назначить соседние темы.</div>'
       + '<div class="field"><label>Показать рядом после выбора</label>'
       + '<div class="note" style="margin-bottom:6px">Соседние темы — «кому интересно это, тому зайдёт и вот это». Частные случаи сюда добавлять не нужно, они и так раскрываются.</div>'
       + '<div id="pr-rel-' + prEsc(key) + '">' + relatedPickerHtml(key, p.related || []) + '</div>'
@@ -2409,8 +2752,8 @@ ${tcList}
         description: (document.getElementById('pr-desc-' + key).value || '').trim(),
         phase: (document.getElementById('pr-phase-' + key) || {}).value || p.phase || 'deal',
         parent_key: (document.getElementById('pr-parent-' + key) || {}).value || '',
-        is_root: (document.getElementById('pr-root-' + key) || {}).value === '1',
-        root_order: parseInt((document.getElementById('pr-rorder-' + key) || {}).value, 10) || 100,
+        is_root: false,   // двери теперь задают направления, поле больше не читаем с экрана
+        root_order: p.root_order || 100,
         related: relatedDraft[key] || p.related || [],
         sort_order: parseInt(document.getElementById('pr-order-' + key).value, 10) || 100,
         status: p.status,
