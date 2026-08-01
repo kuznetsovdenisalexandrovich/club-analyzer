@@ -591,7 +591,22 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
 
     <div class="card">
       <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
-        <span><span class="step-num">1</span> Добавить проблему</span>
+        <span><span class="step-num">1</span> Направления</span>
+        <button class="btn btn-sm" onclick="togglePhasesEditor()">Править</button>
+      </div>
+      <div class="note" style="line-height:1.5">
+        Разделы, по которым сгруппированы проблемы — их же видит участник в анкете.
+        <b>Называй существительными</b> («Сделка», «Клиенты»), а сами проблемы внутри —
+        вопросами «Как…». Пока направления назывались задачами, их было не отличить от пунктов.<br><br>
+        Пояснение читает не человек, а модель при разметке — по нему она решает,
+        куда положить проблему, которую сама предложила.
+      </div>
+      <div id="ph-list" style="margin-top:12px;display:none"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">2</span> Добавить проблему</span>
         <button class="btn btn-sm" onclick="loadProblemsAdmin()">Обновить</button>
       </div>
       <div class="field">
@@ -628,7 +643,7 @@ code.inline{background:var(--surface2);padding:2px 6px;border-radius:4px;font-si
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="step-num">2</span> Справочник</div>
+      <div class="card-title"><span class="step-num">3</span> Справочник</div>
       <div class="note" id="pr-status">Загружаю...</div>
       <div id="pr-list" style="margin-top:12px"></div>
     </div>
@@ -1851,16 +1866,20 @@ ${tcList}
   /* Фазы пути — те же, по которым у Denis'а разложены боги. Нужны, чтобы
      полтора десятка проблем не были стеной: и в аппе человеку выбирать,
      и здесь при разметке глазами искать. */
-  // Те же названия, что видит участник в аппе
-  const PHASES = [
-    { key:'start',   name:'Старт' },
-    { key:'search',  name:'Клиенты' },
-    { key:'qualify', name:'Отбор' },
-    { key:'deal',    name:'Сделка' },
-    { key:'retain',  name:'Повторные продажи' },
-    { key:'scale',   name:'Масштаб' },
-    { key:'self',    name:'Про себя' },
-  ];
+  /* Направления живут в БАЗЕ, не здесь — Denis правит названия и порядок сам,
+     и те же самые видит участник в аппе. Захардкоженный список разошёлся бы
+     с его правками при первом же переименовании. */
+  let PHASES = [];
+
+  async function loadPhases(){
+    if (PHASES.length) return;
+    try {
+      const r = await fetch(`${API_URL}/phases?include_hidden=true`);
+      if (r.ok) PHASES = (await r.json()).map(function(p){
+        return { key:p.key, name:p.label, description:p.description, sort_order:p.sort_order, active:p.active };
+      });
+    } catch(e){}
+  }
 
   function phaseName(key){
     const p = PHASES.find(function(x){ return x.key === key; });
@@ -1906,6 +1925,7 @@ ${tcList}
   async function loadProblemsAdmin(){
     const statusEl = document.getElementById('pr-status');
     if (statusEl) statusEl.textContent = 'Загружаю...';
+    await loadPhases();
     try {
       const r = await fetch(`${API_URL}/problems/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
       if (!r.ok) throw new Error('сервер ответил ' + r.status);
@@ -1919,6 +1939,7 @@ ${tcList}
   // Тихая загрузка — нужна вкладке «Библиотека» и разметке одного видео,
   // там свой статус-текст и своя отрисовка
   async function ensureProblemsLoaded(){
+    await loadPhases();
     if (problemsAll.length) return;
     try {
       const r = await fetch(`${API_URL}/problems/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
@@ -2040,6 +2061,115 @@ ${tcList}
     }
 
     listEl.innerHTML = html;
+  }
+
+  /* ── Редактор направлений ─────────────────────────────────────────────────
+     Ключ задаётся один раз: на него ссылается Problem.phase. Удаления нет —
+     только «скрыть», иначе проблемы внутри осиротеют. */
+
+  function togglePhasesEditor(){
+    const el = document.getElementById('ph-list');
+    if (!el) return;
+    if (el.style.display !== 'none'){ el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    renderPhasesEditor();
+  }
+
+  function renderPhasesEditor(){
+    const el = document.getElementById('ph-list');
+    if (!el) return;
+    const counts = {};
+    problemsAll.forEach(function(p){
+      if (p.status === 'archived') return;
+      counts[p.phase || ''] = (counts[p.phase || ''] || 0) + 1;
+    });
+    el.innerHTML = PHASES.map(function(f){
+      return '<div class="card" style="margin-bottom:10px' + (f.active === false ? ';opacity:.55' : '') + '">'
+        + '<div class="field"><label>Название — коротким существительным</label>'
+        + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-label-' + prEsc(f.key) + '" value="' + prEsc(f.name) + '"></div>'
+        + '<div class="field"><label>Пояснение для модели — чем этот раздел отличается</label>'
+        + '<textarea id="ph-desc-' + prEsc(f.key) + '" class="tc-input" rows="2">' + prEsc(f.description || '') + '</textarea></div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+          + '<div class="field" style="flex:1;min-width:120px"><label>Порядок</label>'
+          + '<input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-order-' + prEsc(f.key) + '" value="' + (f.sort_order || 100) + '"></div>'
+          + '<div class="field" style="flex:1;min-width:150px"><label>Показывать участнику</label>'
+          + '<select id="ph-active-' + prEsc(f.key) + '" class="btn btn-sm" style="cursor:pointer;width:100%">'
+          + '<option value="1"' + (f.active !== false ? ' selected' : '') + '>да</option>'
+          + '<option value="0"' + (f.active === false ? ' selected' : '') + '>скрыть</option>'
+          + '</select></div>'
+        + '</div>'
+        + '<div class="note">' + prEsc(f.key) + ' · проблем внутри: ' + (counts[f.key] || 0)
+          + ' · ключ не меняется, на нём висят проблемы</div>'
+        + '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="savePhase(' + jsArg(f.key) + ')">Сохранить</button>'
+        + '</div>';
+    }).join('')
+    + '<div class="card">'
+      + '<div class="card-title">Новое направление</div>'
+      + '<div class="field"><label>Ключ (латиница, не меняется)</label>'
+      + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-new-key" placeholder="content"></div>'
+      + '<div class="field"><label>Название</label>'
+      + '<input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="ph-new-label" placeholder="Контент"></div>'
+      + '<div class="field"><label>Пояснение для модели</label>'
+      + '<textarea id="ph-new-desc" class="tc-input" rows="2"></textarea></div>'
+      + '<div class="note" id="ph-new-status"></div>'
+      + '<button class="btn-primary" style="width:100%;margin-top:6px" onclick="createPhase()">Добавить</button>'
+    + '</div>';
+  }
+
+  async function savePhaseRow(payload, statusEl){
+    if (statusEl) statusEl.textContent = 'Сохраняю...';
+    const r = await fetch(`${API_URL}/phases/admin?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(function(){ return {}; });
+    if (!r.ok) throw new Error(data.detail || ('сервер ответил ' + r.status));
+    return data;
+  }
+
+  async function savePhase(key){
+    const activeSel = document.getElementById('ph-active-' + key);
+    const willHide = activeSel && activeSel.value === '0';
+    const inside = problemsAll.filter(function(p){ return p.phase === key && p.status !== 'archived'; }).length;
+    if (willHide && inside && !confirm('Скрыть направление? Проблем внутри: ' + inside + '. Они останутся в справочнике, но участник их не увидит.')) return;
+    try {
+      await savePhaseRow({
+        key: key,
+        label: (document.getElementById('ph-label-' + key).value || '').trim() || key,
+        description: (document.getElementById('ph-desc-' + key).value || '').trim(),
+        sort_order: parseInt(document.getElementById('ph-order-' + key).value, 10) || 100,
+        active: !willHide,
+      }, null);
+      PHASES = [];                 // перечитываем, иначе на экране останется старое название
+      await loadPhases();
+      renderPhasesEditor();
+      renderProblems();
+    } catch(e){ alert(e.message); }
+  }
+
+  async function createPhase(){
+    const statusEl = document.getElementById('ph-new-status');
+    const key = (document.getElementById('ph-new-key').value || '').trim();
+    if (!/^[a-z0-9_]+$/.test(key)){
+      statusEl.textContent = 'Ключ — латиница в нижнем регистре, цифры и подчёркивание';
+      return;
+    }
+    if (PHASES.some(function(f){ return f.key === key; })){
+      statusEl.textContent = 'Такое направление уже есть';
+      return;
+    }
+    try {
+      const maxOrder = PHASES.reduce(function(a, f){ return Math.max(a, f.sort_order || 0); }, 0);
+      await savePhaseRow({
+        key: key,
+        label: (document.getElementById('ph-new-label').value || '').trim() || key,
+        description: (document.getElementById('ph-new-desc').value || '').trim(),
+        sort_order: maxOrder + 10, active: true,
+      }, statusEl);
+      PHASES = [];
+      await loadPhases();
+      renderPhasesEditor();
+      renderProblems();
+    } catch(e){ statusEl.textContent = e.message; }
   }
 
   function toggleProblemEditor(key){
@@ -2748,7 +2878,8 @@ ${list}
    - key: короткий латинский ключ в нижнем регистре (например price_objection)
    - label: как её назвал бы сам клиент, простыми словами
    - description: чем отличается от соседних проблем
-   - phase: к какому направлению относится — "start" (самое начало: не понимает, за что хвататься, что вообще продавать), "search" (где брать клиентов), "qualify" (понять, кто перед тобой, стоит ли тратить время), "deal" (довести до оплаты: презентация, цена, возражения, дожим), "retain" (удержать и вырастить: повторные продажи, лояльность), "scale" (масштаб и система: автоматизация, делегирование, цифры, рост), "self" (про самого продавца: страхи, дисциплина, мотивация, состояние)
+   - phase: к какому направлению относится:
+${PHASES.filter(function(f){ return f.active !== false; }).map(function(f){ return `     "${f.key}" — ${f.name}${f.description ? ': ' + f.description : ''}`; }).join('\n')}
    Предлагай только если это правда отдельная проблема, а не синоним существующей. Если всё покрыто справочником — верни пустой список.
 
 3. level: кому подойдёт — "beginner" (начинающим), "mid" (уже что-то делает), "advanced" (продвинутым) или "any" (всем)
