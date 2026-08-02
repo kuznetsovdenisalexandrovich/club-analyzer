@@ -2479,18 +2479,34 @@ ${tcList}
 
     if ((d.notes || []).length){
       html += '<div class="result-block-label" style="margin:18px 0 8px">Написали своими словами</div>';
+      html += '<div class="note" style="margin-bottom:8px">Удаление убирает ВЕСЬ ответ человека, включая отмеченные им проблемы — они пропадут и из спроса выше. Для своих тестовых прохождений это то, что нужно.</div>';
       html += d.notes.map(function(n){
         const who = n.name ? prEsc(n.name) : ('id ' + n.telegram_id);
         const picked = (n.problems || []).map(function(k){ return problemLabel(k); }).join(', ');
         return '<div class="card" style="margin-bottom:8px">'
           + '<div style="font-size:13px;line-height:1.5">' + prEsc(n.note) + '</div>'
-          + '<div class="note" style="margin-top:6px">' + who
-            + (picked ? ' · выбрал: ' + prEsc(picked) : '') + '</div>'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end;margin-top:6px">'
+            + '<div class="note" style="margin:0">' + who
+              + (picked ? ' · выбрал: ' + prEsc(picked) : '') + '</div>'
+            + '<button class="btn btn-sm" style="flex-shrink:0" onclick="deletePlanAnswer(' + n.telegram_id + ')">Удалить</button>'
+          + '</div>'
         + '</div>';
       }).join('');
     }
 
     el.innerHTML = html;
+  }
+
+  /* Тестовые прохождения анкеты иначе висят в спросе вечно и портят картину:
+     Denis сам себе накликал десяток вариантов, пока строил экран */
+  async function deletePlanAnswer(tgId){
+    if (!confirm('Удалить ответ анкеты целиком?\n\nВместе со свободным текстом пропадут и отмеченные этим человеком проблемы — спрос пересчитается без него. Вернуть будет нельзя.')) return;
+    try {
+      const r = await fetch(`${API_URL}/plan-answers/${encodeURIComponent(tgId)}`, { method: 'DELETE' });
+      const data = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(data.detail || ('сервер ответил ' + r.status));
+      await loadPlanDemand();
+    } catch(e){ alert('Не удалось удалить: ' + e.message); }
   }
 
   function togglePhasesEditor(){
