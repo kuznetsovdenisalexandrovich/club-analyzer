@@ -439,6 +439,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     <div class="mode-tab tab" onclick="switchMode('library')">Библиотека</div>
     <div class="mode-tab tab" onclick="switchMode('digests')">Дайджесты</div>
     <div class="mode-tab tab" onclick="switchMode('problems')">Проблемы</div>
+    <div class="mode-tab tab" onclick="switchMode('free')">Бесплатные</div>
   </div>
 
   <div class="mode-panel active" id="mode-new">
@@ -760,6 +761,22 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   </div>
 
   <!-- ═══ Проблемы: справочник, по которому размечаются лекции и спрашивается человек ═══ -->
+  <!-- Бесплатные короткие версии занятий: экран ЗАПОЛНЕНИЯ.
+       Ссылки хранятся полем У САМОЙ ЛЕКЦИИ, а не отдельным списком ключей —
+       иначе при смене слага в списке остался бы висеть мёртвый ключ, и узнали
+       бы мы об этом от человека, у которого не открылась ссылка. -->
+  <div class="mode-panel" id="mode-free" style="display:none">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <div class="tab" id="free-filter-none" onclick="setFreeFilter('none')">Без бесплатной</div>
+      <div class="tab" id="free-filter-has" onclick="setFreeFilter('has')">С бесплатной</div>
+      <div class="tab" id="free-filter-all" onclick="setFreeFilter('all')">Все</div>
+      <input id="free-search" placeholder="Поиск по названию или ключу" oninput="renderFreeList()"
+             style="flex:1;min-width:180px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg,transparent);color:inherit;font-size:13px">
+    </div>
+    <div id="free-status" style="font-size:12px;opacity:.7;margin-bottom:10px"></div>
+    <div id="free-list"></div>
+  </div>
+
   <div class="mode-panel" id="mode-problems" style="display:none">
     <div class="card">
       <div class="card-title"><span class="step-num">?</span> Зачем это</div>
@@ -1279,7 +1296,7 @@ ${tcList}
     document.querySelectorAll('#result-wrap .tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
   }
 
-  const MODES = ['new','library','digests','problems'];
+  const MODES = ['new','library','digests','problems','free'];
 
   function switchMode(name){
     MODES.forEach(m => {
@@ -1292,6 +1309,7 @@ ${tcList}
     if (name === 'digests' && !libraryLoaded) loadLibraryFromDB();
     if (name === 'digests') loadDigestsList();
     if (name === 'problems') loadProblemsAdmin();
+    if (name === 'free') openFreeTab();
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
@@ -2378,6 +2396,116 @@ ${tcList}
      поэтому JS-строку берём в ОДИНАРНЫЕ. JSON.stringify тут не годится: она
      возвращает строку в двойных кавычках, и атрибут обрывается на первой же
      (`onclick="fn("clients")"`) — ровно на этом сломались все кнопки вкладки */
+
+/* ── Бесплатные короткие версии занятий ────────────────────────────────────
+   Экран заполнения: список лекций и по две ссылки у каждой. Фильтр по
+   умолчанию — «без бесплатной», потому что работа тут ровно одна: закрыть
+   пробелы, а не любоваться заполненным.
+
+   ВАЖНО ДЛЯ ВОРОНКИ: первая остановка плана у холодного человека может быть
+   только лекцией, у которой бесплатная версия ЕСТЬ. Иначе воронка доводит до
+   обещанного просмотра и упирается в «вступите в клуб». */
+
+var freeFilter = 'none';
+
+async function openFreeTab(){
+  if (!libraryLoaded) await loadLibraryFromDB();
+  setFreeFilter(freeFilter);
+}
+
+function setFreeFilter(f){
+  freeFilter = f;
+  ['none','has','all'].forEach(function(k){
+    var el = document.getElementById('free-filter-' + k);
+    if (el) el.classList.toggle('active', k === f);
+  });
+  renderFreeList();
+}
+
+function lectureHasFree(l){
+  return !!((l.free_tg_url || '').trim() || (l.free_vk_url || '').trim());
+}
+
+function renderFreeList(){
+  var box = document.getElementById('free-list');
+  var status = document.getElementById('free-status');
+  if (!box) return;
+  var q = ((document.getElementById('free-search') || {}).value || '').toLowerCase().trim();
+
+  var all = libraryLectures || [];
+  var withFree = all.filter(lectureHasFree).length;
+  status.textContent = 'Бесплатная версия есть у ' + withFree + ' из ' + all.length + ' занятий';
+
+  var rows = all.filter(function(l){
+    if (freeFilter === 'none' && lectureHasFree(l)) return false;
+    if (freeFilter === 'has' && !lectureHasFree(l)) return false;
+    if (!q) return true;
+    return (l.title || '').toLowerCase().indexOf(q) !== -1
+        || (l.slug || '').toLowerCase().indexOf(q) !== -1;
+  });
+
+  if (!rows.length){
+    box.innerHTML = '<div style="opacity:.6;font-size:13px">Ничего не нашлось. '
+      + (freeFilter === 'none' ? 'Похоже, пробелов не осталось.' : '') + '</div>';
+    return;
+  }
+
+  var inp = 'padding:7px 9px;border-radius:8px;border:1px solid var(--line);'
+    + 'background:var(--input-bg,transparent);color:inherit;font-size:12.5px;width:100%';
+  var h = '';
+  rows.forEach(function(l){
+    h += '<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px">'
+      + '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px">'
+        + '<b style="font-size:13.5px">' + escapeHtmlFree(l.title || l.slug) + '</b>'
+        + '<span style="font-size:11px;opacity:.6">' + escapeHtmlFree(l.slug) + '</span>'
+        + (lectureHasFree(l) ? '<span style="font-size:11px;opacity:.7">· бесплатная есть</span>' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<input id="free-tg-' + escapeHtmlFree(l.slug) + '" placeholder="Ссылка ТГ на бесплатную версию" value="'
+          + escapeHtmlFree(l.free_tg_url || '') + '" style="flex:1;min-width:200px;' + inp + '">'
+        + '<input id="free-vk-' + escapeHtmlFree(l.slug) + '" placeholder="Ссылка ВК" value="'
+          + escapeHtmlFree(l.free_vk_url || '') + '" style="flex:1;min-width:200px;' + inp + '">'
+        + '<button class="btn" onclick="saveFreeLinks(' + jsArg(l.slug) + ')">Сохранить</button>'
+      + '</div>'
+      + '<div id="free-msg-' + escapeHtmlFree(l.slug) + '" style="font-size:11px;opacity:.7;margin-top:6px"></div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+}
+
+function escapeHtmlFree(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function saveFreeLinks(slug){
+  var tg = (document.getElementById('free-tg-' + slug) || {}).value || '';
+  var vk = (document.getElementById('free-vk-' + slug) || {}).value || '';
+  var msg = document.getElementById('free-msg-' + slug);
+  if (msg) msg.textContent = 'Сохраняю…';
+  try {
+    var r = await fetch(API_URL + '/lectures/' + encodeURIComponent(slug)
+      + '?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN), {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ free_tg_url: tg.trim(), free_vk_url: vk.trim() })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var updated = await r.json();
+    // Обновляем кэш, иначе счётчик и фильтр врут до перезагрузки страницы
+    (libraryLectures || []).forEach(function(l){
+      if (l.slug === slug){ l.free_tg_url = updated.free_tg_url; l.free_vk_url = updated.free_vk_url; }
+    });
+    if (msg) msg.textContent = 'Сохранено';
+    var status = document.getElementById('free-status');
+    var withFree = (libraryLectures || []).filter(lectureHasFree).length;
+    if (status) status.textContent = 'Бесплатная версия есть у ' + withFree
+      + ' из ' + (libraryLectures || []).length + ' занятий';
+  } catch(e){
+    if (msg) msg.textContent = 'Не сохранилось: ' + e.message;
+  }
+}
+
   function jsArg(s){
     return "'" + String(s == null ? '' : s)
       .replace(/\\/g, '\\\\')
