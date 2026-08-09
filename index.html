@@ -1636,6 +1636,77 @@ ${tcList}
     });
   }
 
+  /* ══ Загрузка аудиоверсии занятия ═════════════════════════════════════════
+     Файл идёт НАПРЯМУЮ в хранилище, мимо нашего бэкенда: часовая запись весит
+     десятки мегабайт, а Railway режет и размер тела запроса, и время обработки.
+     Бэкенд только подписывает одноразовый адрес — секретный ключ остаётся у него.
+
+     ГРАБЛИ, из-за которых тут всё явно: Content-Type в PUT обязан совпасть с
+     тем, что подписал сервер, иначе хранилище отвечает 403 без пояснений.
+     Поэтому тип берём ИЗ ОТВЕТА сервера, а не из file.type — браузеры на mp3
+     выдают то audio/mpeg, то audio/mp3, то пустую строку. */
+
+  async function handleAudioUpload(slug, file) {
+    if (!file) return;
+    var statusEl = document.getElementById('lc-audio-status-' + slug);
+    var setStatus = function(t){ if (statusEl) statusEl.textContent = t; };
+
+    var mb = (file.size / 1048576);
+    var ext = (file.name.split('.').pop() || 'mp3').toLowerCase();
+    if (['mp3','m4a','aac','ogg','opus','wav'].indexOf(ext) === -1) {
+      setStatus('Формат .' + ext + ' не поддерживается'); return;
+    }
+    if (ext === 'wav') {
+      // Не запрещаем, но предупреждаем: wav не сжат, час записи это ~600 МБ —
+      // и хранение, и трафик, и время загрузки у людей вырастут на порядок
+      if (!confirm('Это WAV — он не сжат и весит примерно в 15 раз больше mp3. Точно грузим?')) return;
+    }
+
+    setStatus('Запрашиваю адрес…');
+    try {
+      var r = await fetch(API_URL + '/admin/audio-upload-url?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: slug, ext: ext })
+      });
+      var d = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+
+      setStatus('Заливаю ' + mb.toFixed(1) + ' МБ…');
+      var put = await fetch(d.upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': d.content_type },
+        body: file
+      });
+      if (!put.ok) {
+        throw new Error('Хранилище отказало: HTTP ' + put.status
+          + (put.status === 403 ? ' (проверь ключи и что подпись не протухла)' : '')
+          + (put.status === 0 ? ' (похоже на CORS — разреши домены в настройках бакета)' : ''));
+      }
+
+      // Ссылку сразу и в поле, и в базу: если сохранить только в поле, а Denis
+      // закроет редактор не нажав «Сохранить карточку», файл в хранилище есть,
+      // а лекция про него не знает — и это молча
+      var input = document.getElementById('lc-audio-' + slug);
+      if (input) input.value = d.public_url;
+
+      setStatus('Сохраняю ссылку…');
+      var save = await fetch(API_URL + '/lectures/' + encodeURIComponent(slug)
+        + '?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio_url: d.public_url })
+      });
+      if (!save.ok) throw new Error('Файл залит, но ссылка не сохранилась: HTTP ' + save.status);
+      var updated = await save.json();
+      var idx = libraryLectures.findIndex(function(x){ return x.slug === slug; });
+      if (idx >= 0) libraryLectures[idx] = updated;
+
+      setStatus('Готово');
+      renderLibraryList();
+    } catch (e) {
+      setStatus('Ошибка: ' + e.message);
+    }
+  }
+
   async function handleCoverUpload(key, file) {
     if (!file) return;
     const statusEl = document.getElementById('cover-status-'+key);
@@ -1945,6 +2016,7 @@ ${tcList}
         + (trChars ? trChars.toLocaleString('ru-RU') + ' знаков' : 'транскрипта нет')
         + (trCover ? ' · покрывает ' + Math.round(trCover) + ' мин' : '')
         + (l.duration_minutes ? ' · запись ' + l.duration_minutes + ' мин' : '')
+        + ((l.audio_url || '').trim() ? ' · аудио есть' : ' · без аудио')
         + `</div>`;
       return `<div class="card" id="lib-card-${l.slug}">
         <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;gap:8px">
@@ -2001,6 +2073,17 @@ ${tcList}
       <div class="field"><label>Темы (через запятую)</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-topics-${slug}" value="${(l.topics||[]).join(', ')}"></div>
       <div class="field"><label>Ссылка ТГ</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-link-${slug}" value="${l.link||''}"></div>
       <div class="field"><label>Ссылка ВК</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-linkvk-${slug}" value="${l.link_vk||''}"></div>
+      <div class="field">
+        <label>Аудиоверсия (mp3) — питает подкаст-плеер в приложении</label>
+        <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-audio-${slug}" value="${(l.audio_url||'').replace(/"/g,'&quot;')}" placeholder="https://club-audio.s3.twcstorage.ru/audio/...">
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+          <input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav" id="lc-audiofile-${slug}" style="display:none"
+                 onchange="handleAudioUpload('${slug}', this.files[0])">
+          <button class="btn btn-sm" onclick="document.getElementById('lc-audiofile-${slug}').click()">Загрузить файл</button>
+          ${(l.audio_url||'') ? '<a class="btn btn-sm" href="' + (l.audio_url||'').replace(/"/g,'&quot;') + '" target="_blank" rel="noopener">Проверить</a>' : ''}
+          <span class="note" id="lc-audio-status-${slug}" style="flex:1;min-width:140px"></span>
+        </div>
+      </div>
       <div style="display:flex;gap:10px">
         <div class="field" style="flex:1"><label>Тип</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-type-${slug}" value="${l.type||'lecture'}"></div>
         <div class="field" style="flex:1"><label>Длительность (мин)</label><input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-duration-${slug}" value="${l.duration_minutes||''}"></div>
@@ -2038,6 +2121,7 @@ ${tcList}
       topics: document.getElementById('lc-topics-'+slug).value.split(',').map(s=>s.trim()).filter(Boolean),
       link: document.getElementById('lc-link-'+slug).value.trim(),
       link_vk: document.getElementById('lc-linkvk-'+slug).value.trim(),
+      audio_url: document.getElementById('lc-audio-'+slug).value.trim(),
       type: document.getElementById('lc-type-'+slug).value.trim() || 'lecture',
       duration_minutes: parseInt(document.getElementById('lc-duration-'+slug).value, 10) || null,
       timecodes: timecodesFromText(document.getElementById('lc-timecodes-'+slug).value),
