@@ -1396,8 +1396,12 @@ ${tcList}
       </tbody></table>`;
   }
 
-  const API_URL = 'https://club-backend-production-fc7f.up.railway.app';
-  const ADMIN_TOKEN = 'club2024secretkey';
+  // Бэкенд переехал на Timeweb (Москва), 12.08.2026
+  const API_URL = 'https://api.youselllikeagod-magazine.ru';
+  // Заполняется ТОЛЬКО после входа по пину — в файле секрета нет
+  const ADMIN_TOKEN_KEY = 'analyzer_token';
+  let ADMIN_TOKEN = '';
+  try { ADMIN_TOKEN = sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch(e) {}
 
   async function lectureExists(slug) {
     try {
@@ -2312,31 +2316,52 @@ ${tcList}
   renderDict();
 
   // ── PIN ──
-  const PIN = '33647';
+  /* ПИН БОЛЬШЕ НЕ ПРОВЕРЯЕТСЯ ЗДЕСЬ. Страница на GitHub Pages открыта любому,
+     кто знает адрес: и пин, и токен было видно в исходнике. Теперь пин уходит
+     на сервер, обратно приходит ключ на 12 часов, живущий только в этой вкладке. */
+  const PIN_LENGTH = 5;
   let pinEntered = '';
+  let pinBusy = false;
+
+  async function submitPin(){
+    const err = document.getElementById('pin-error');
+    pinBusy = true;
+    try {
+      const r = await fetch(API_URL + '/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinEntered })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || 'Не получилось войти');
+      ADMIN_TOKEN = data.token;
+      try { sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token); } catch(e) {}
+      err.textContent = '';
+      document.getElementById('pin-screen').classList.add('hidden');
+    } catch (e) {
+      err.textContent = e.message;
+    } finally {
+      pinBusy = false;
+      pinEntered = '';
+      for (let i = 0; i < PIN_LENGTH; i++) {
+        const d = document.getElementById('d'+i);
+        if (d) d.classList.remove('filled');
+      }
+    }
+  }
 
   function pinKey(k) {
     const err = document.getElementById('pin-error');
     err.textContent = '';
     if (k === 'del') { pinEntered = pinEntered.slice(0,-1); }
     else if (k === 'clear') { pinEntered = ''; }
-    else if (pinEntered.length < PIN.length) { pinEntered += k; }
+    else if (pinEntered.length < PIN_LENGTH && !pinBusy) { pinEntered += k; }
 
-    for (let i = 0; i < PIN.length; i++) {
+    for (let i = 0; i < PIN_LENGTH; i++) {
       document.getElementById('d'+i).classList.toggle('filled', i < pinEntered.length);
     }
 
-    if (pinEntered.length === PIN.length) {
-      if (pinEntered === PIN) {
-        try { sessionStorage.setItem('analyzer_pin_ok','1'); } catch(e) {}
-        document.getElementById('pin-screen').classList.add('hidden');
-      } else {
-        err.textContent = 'Неверный пин-код';
-        pinEntered = '';
-        for (let i = 0; i < PIN.length; i++) {
-          document.getElementById('d'+i).classList.remove('filled');
-        }
-      }
+    if (pinEntered.length === PIN_LENGTH) {
+      submitPin();   // решает сервер, а не эта страница
     }
   }
 
@@ -2349,7 +2374,8 @@ ${tcList}
 
   (function(){
     let ok = false;
-    try { ok = sessionStorage.getItem('analyzer_pin_ok') === '1'; } catch(e) {}
+    // Пропуск экрана решает НАЛИЧИЕ КЛЮЧА, а не отдельная отметка
+    ok = !!ADMIN_TOKEN;
     if (ok) { document.getElementById('pin-screen').classList.add('hidden'); }
   })();
 
