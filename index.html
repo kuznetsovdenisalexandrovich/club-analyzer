@@ -834,6 +834,23 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
         <button class="btn btn-sm" onclick="addSlot('slot')">+ Правило</button>
       </div>
 
+      <div class="note" style="margin:14px 0 6px"><b>Проверить на воображаемом участнике</b> — что реально встанет в его путь</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+        <select class="input" id="pv-level" style="width:190px">
+          <option value="">уровень: любой</option>
+          <option value="start">только начинаю</option>
+          <option value="some">учили, не уверен чему</option>
+          <option value="pro">уже в теме</option>
+        </select>
+        <select class="input" id="pv-depth" style="width:180px">
+          <option value="">глубина: любая</option>
+          <option value="short">только важное</option>
+          <option value="deep">как следует</option>
+        </select>
+        <button class="btn btn-sm" onclick="previewPlaylist()">Показать путь</button>
+      </div>
+      <div id="pl-preview"></div>
+
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
         <button class="btn" onclick="savePlaylist()">Сохранить</button>
         <button class="btn btn-sm" onclick="closePlaylistEditor()">Закрыть</button>
@@ -2903,6 +2920,45 @@ async function saveFreeLinks(slug){
       if (sl.kind === 'lecture'){ sels[0].value = sl.slug || ''; }
       else { sels[0].value = sl.problem || ''; sels[1].value = sl.weight || 'any'; }
     });
+  }
+
+  /* Предпросмотр считает СЕРВЕР — тем же кодом, каким собирается живой путь.
+     Своей копии правила здесь сознательно нет: две реализации одного подбора
+     разъезжаются, и тогда предпросмотр врал бы ровно в том, ради чего нужен.
+
+     Отправляем ЧЕРНОВИК из редактора, а не сохранённый плейлист: проверять
+     хочется до сохранения, иначе придётся сохранять заведомо сырое. */
+  async function previewPlaylist(){
+    const box = document.getElementById('pl-preview');
+    box.innerHTML = '<div class="note">Считаю…</div>';
+    const body = {
+      slots: plSlots.filter(function(s){ return s.kind === 'lecture' ? !!s.slug : !!s.problem; }),
+      level: document.getElementById('pv-level').value,
+      depth: document.getElementById('pv-depth').value,
+      problems: Array.from(document.querySelectorAll('.pl-cp:checked')).map(function(el){ return el.value; })
+    };
+    if (!body.slots.length){
+      box.innerHTML = '<div class="note">Сначала добавь хотя бы одну позицию.</div>';
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/admin/playlist/preview?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok){ box.innerHTML = '<div class="note">' + escapeHtmlAn(d.detail || 'Не получилось') + '</div>'; return; }
+      let n = 0;
+      box.innerHTML = '<div class="note" style="margin-bottom:6px">Встанет позиций: <b>' + d.filled + '</b>'
+        + (d.empty ? ', пустых: <b>' + d.empty + '</b>' : '')
+        + '. Дальше путь достроится подбором по болям.</div>'
+        + (d.items || []).map(function(it){
+            const label = it.ok ? (++n) + '. ' + escapeHtmlAn(it.title) : '— ' + escapeHtmlAn(it.title || 'пусто');
+            const kind = it.kind === 'lecture' ? 'закреплена' : 'правило: ' + escapeHtmlAn(it.problem || '');
+            return '<div style="padding:4px 0;border-bottom:1px solid rgba(127,127,127,.12)">'
+              + '<div' + (it.ok ? '' : ' style="opacity:.6"') + '>' + label + '</div>'
+              + '<div class="note">' + kind + (it.reason ? ' · ' + escapeHtmlAn(it.reason) : '') + '</div></div>';
+          }).join('');
+    } catch(e){ box.innerHTML = '<div class="note">Нет связи: ' + escapeHtmlAn(e.message) + '</div>'; }
   }
 
   async function savePlaylist(){
