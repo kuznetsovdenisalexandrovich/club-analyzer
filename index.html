@@ -802,6 +802,19 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       <div id="pl-list"><div class="note">Загружаю…</div></div>
     </div>
 
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">3</span> Под кого плейлисты есть</span>
+        <button class="btn btn-sm" onclick="loadCoverage()">Обновить</button>
+      </div>
+      <div class="note" style="margin-bottom:8px">
+        Шесть клеток — все сочетания уровня и глубины. Клетка считается закрытой, если
+        под неё подходит плейлист <b>без условия по темам</b>: плейлист с темами
+        закрывает клетку не целиком, и записывать его сюда было бы враньём.
+      </div>
+      <div id="pl-coverage"><div class="note">Нажми «Обновить».</div></div>
+    </div>
+
     <div class="card" id="pl-editor" style="display:none">
       <div class="card-title"><span class="step-num">2</span> <span id="pl-editor-title">Новый плейлист</span></div>
       <input type="hidden" id="pl-id">
@@ -1399,6 +1412,7 @@ ${tcList}
       if (!libraryLoaded) loadLibraryFromDB();
       if (!problemsAll.length) loadProblemsAdmin();
       loadPlaylists();
+      loadCoverage();
     }
   }
 
@@ -2928,6 +2942,53 @@ async function saveFreeLinks(slug){
 
      Отправляем ЧЕРНОВИК из редактора, а не сохранённый плейлист: проверять
      хочется до сохранения, иначе придётся сохранять заведомо сырое. */
+  /* Покрытие: под кого плейлисты уже есть, а кто останется без них.
+     Полный перебор комбинаций тут невозможен (тем десятки, наборов больше, чем
+     участников), поэтому сетка уровень × глубина плюс реальные ответы анкет. */
+  async function loadCoverage(){
+    const box = document.getElementById('pl-coverage');
+    box.innerHTML = '<div class="note">Считаю…</div>';
+    try {
+      const r = await fetch(`${API_URL}/admin/playlists/coverage?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      const d = await r.json();
+      if (!r.ok){ box.innerHTML = '<div class="note">' + escapeHtmlAn(d.detail || 'Не получилось') + '</div>'; return; }
+
+      const cells = (d.grid || []).map(function(g){
+        const has = !!g.playlist;
+        return '<div style="border:1px solid rgba(127,127,127,.2);border-radius:8px;padding:8px;'
+          + (has ? '' : 'background:rgba(232,97,74,.08);') + '">'
+          + '<div style="font-size:12px"><b>' + escapeHtmlAn(g.level_label) + '</b></div>'
+          + '<div class="note">' + escapeHtmlAn(g.depth_label) + '</div>'
+          + '<div style="margin-top:4px;font-size:12px">'
+          + (has ? '\u2713 ' + escapeHtmlAn(g.playlist) : '\u2014 плейлиста нет')
+          + '</div>'
+          + '<div class="note">людей: ' + g.people
+          + (g.people ? ' \u00b7 с плейлистом: ' + g.covered : '') + '</div>'
+          + '</div>';
+      }).join('');
+
+      const themes = (d.themes || []).length
+        ? '<div class="note" style="margin:12px 0 4px"><b>Самые частые темы у участников</b></div>'
+          + d.themes.map(function(t){
+              return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(127,127,127,.12)">'
+                + '<span' + (t.has_playlist ? '' : ' style="opacity:.7"') + '>'
+                + (t.has_playlist ? '\u2713 ' : '\u00b7 ') + escapeHtmlAn(t.label) + '</span>'
+                + '<span class="note">' + t.people + '</span></div>';
+            }).join('')
+        : '';
+
+      box.innerHTML =
+        '<div class="note" style="margin-bottom:8px">Анкету прошли: <b>' + d.answered + '</b>'
+        + ' \u00b7 активных плейлистов: <b>' + d.playlists_active + '</b>'
+        + (d.uncovered
+            ? ' \u00b7 <b style="color:#e8614a">без плейлиста останутся ' + d.uncovered + '</b>'
+            : (d.answered ? ' \u00b7 всем есть что показать' : ''))
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">' + cells + '</div>'
+        + themes;
+    } catch(e){ box.innerHTML = '<div class="note">Нет связи: ' + escapeHtmlAn(e.message) + '</div>'; }
+  }
+
   async function previewPlaylist(){
     const box = document.getElementById('pl-preview');
     box.innerHTML = '<div class="note">Считаю…</div>';
