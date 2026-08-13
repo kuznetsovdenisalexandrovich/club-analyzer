@@ -440,6 +440,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     <div class="mode-tab tab" onclick="switchMode('digests')">Дайджесты</div>
     <div class="mode-tab tab" onclick="switchMode('problems')">Проблемы</div>
     <div class="mode-tab tab" onclick="switchMode('free')">Бесплатные</div>
+    <div class="mode-tab tab" onclick="switchMode('playlists')">Плейлисты</div>
   </div>
 
   <div class="mode-panel active" id="mode-new">
@@ -775,6 +776,71 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     </div>
     <div id="free-status" style="font-size:12px;opacity:.7;margin-bottom:10px"></div>
     <div id="free-list"></div>
+  </div>
+
+  <div class="mode-panel" id="mode-playlists" style="display:none">
+    <div class="card">
+      <div class="card-title"><span class="step-num">?</span> Зачем это</div>
+      <div class="note" style="line-height:1.5">
+        Плейлист — <b>начало</b> личного пути, собранное тобой руками. Дальше путь
+        достраивается обычным подбором по болям, так что доводить плейлист до
+        десяти позиций не нужно: сколько скуратировал, столько и пойдёт первым.<br><br>
+        Позиция бывает двух видов. <b>Лекция</b> — конкретная, всегда она.
+        <b>Правило</b> — «сюда лекцию по такой-то теме», приложение подберёт её под
+        уровень конкретного человека. Правило, под которое ничего не нашлось, молча
+        исчезает — путь не рвётся.<br><br>
+        <b>Условия</b> решают, кому плейлист достанется. Пустое условие — «подходит
+        всем». Если подходят несколько, берётся первый по порядку сортировки.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">1</span> Плейлисты</span>
+        <button class="btn btn-sm" onclick="newPlaylist()">Новый</button>
+      </div>
+      <div id="pl-list"><div class="note">Загружаю…</div></div>
+    </div>
+
+    <div class="card" id="pl-editor" style="display:none">
+      <div class="card-title"><span class="step-num">2</span> <span id="pl-editor-title">Новый плейлист</span></div>
+      <input type="hidden" id="pl-id">
+      <input class="input" type="text" id="pl-title" placeholder="Название — для тебя, участник его не видит" style="margin-bottom:8px">
+      <textarea class="input" id="pl-note" rows="2" placeholder="Заметка для себя (необязательно)" style="margin-bottom:8px"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <label class="note">Порядок отбора <input class="input" type="number" id="pl-sort" value="100" style="width:80px;display:inline-block;margin-left:6px"></label>
+        <label class="note"><input type="checkbox" id="pl-active" checked> Включён</label>
+      </div>
+
+      <div class="note" style="margin:10px 0 4px"><b>Кому достанется</b> — ничего не отмечено значит «всем»</div>
+      <div style="margin-bottom:6px">
+        <span class="note">Уровень:</span>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="start"> только начинаю</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="some"> учили, не уверен чему</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="pro"> уже в теме</label>
+      </div>
+      <div style="margin-bottom:6px">
+        <span class="note">Глубина:</span>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-dp" value="short"> только важное</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-dp" value="deep"> как следует</label>
+      </div>
+      <div class="note" style="margin-bottom:4px">Темы, при которых плейлист подходит (хотя бы одна из отмеченных):</div>
+      <div id="pl-cond-problems" style="max-height:160px;overflow:auto;margin-bottom:10px"></div>
+
+      <div class="note" style="margin:12px 0 6px"><b>Позиции по порядку</b></div>
+      <div id="pl-slots"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+        <button class="btn btn-sm" onclick="addSlot('lecture')">+ Лекция</button>
+        <button class="btn btn-sm" onclick="addSlot('slot')">+ Правило</button>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" onclick="savePlaylist()">Сохранить</button>
+        <button class="btn btn-sm" onclick="closePlaylistEditor()">Закрыть</button>
+        <button class="btn btn-sm" onclick="deletePlaylist()" id="pl-delete" style="display:none">Удалить</button>
+      </div>
+      <div class="note" id="pl-status" style="margin-top:8px"></div>
+    </div>
   </div>
 
   <div class="mode-panel" id="mode-problems" style="display:none">
@@ -1296,7 +1362,7 @@ ${tcList}
     document.querySelectorAll('#result-wrap .tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
   }
 
-  const MODES = ['new','library','digests','problems','free'];
+  const MODES = ['new','library','digests','problems','free','playlists'];
 
   function switchMode(name){
     MODES.forEach(m => {
@@ -1310,6 +1376,13 @@ ${tcList}
     if (name === 'digests') loadDigestsList();
     if (name === 'problems') loadProblemsAdmin();
     if (name === 'free') openFreeTab();
+    // Плейлисту нужны ОБА справочника: лекции для закреплённых позиций и
+    // проблемы для правил. Грузим оба, иначе выпадашки будут пустыми
+    if (name === 'playlists'){
+      if (!libraryLoaded) loadLibraryFromDB();
+      if (!problemsAll.length) loadProblemsAdmin();
+      loadPlaylists();
+    }
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
@@ -2634,6 +2707,244 @@ async function saveFreeLinks(slug){
   function problemLabel(key){
     const p = problemsAll.find(function(x){ return x.key === key; });
     return p ? p.label : key;
+  }
+
+
+  /* ══ ПЛЕЙЛИСТЫ ══════════════════════════════════════════════════════════
+     Плейлист — курированное НАЧАЛО личного пути; дальше приложение достраивает
+     путь обычным подбором по болям. Поэтому здесь нет требования «заполни
+     десять позиций»: сколько скуратировал, столько и пойдёт первым.
+
+     ⚠️ СЛОТЫ ХРАНЯТСЯ В ПАМЯТИ РЕДАКТОРА и уходят на сервер ЦЕЛИКОМ одним
+     списком. Правки по одному слоту отдельными запросами не делаем: порядок
+     позиций — главное содержимое плейлиста, и он должен сохраняться как
+     единое целое, а не собираться из гонки нескольких запросов. */
+  let playlistsAll = [];
+  let plSlots = [];
+
+  async function loadPlaylists(){
+    const box = document.getElementById('pl-list');
+    try {
+      const r = await fetch(`${API_URL}/admin/playlists?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      if (!r.ok) throw new Error('сервер ответил ' + r.status);
+      const d = await r.json();
+      playlistsAll = d.playlists || [];
+      renderPlaylistsList();
+    } catch(e){
+      box.innerHTML = '<div class="note">Не удалось загрузить: ' + escapeHtmlAn(e.message) + '</div>';
+    }
+  }
+
+  function escapeHtmlAn(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function plCondSummary(p){
+    const bits = [];
+    const LV = {start:'начинаю', some:'учили', pro:'в теме'};
+    const DP = {short:'важное', deep:'глубоко'};
+    if ((p.cond_levels || []).length) bits.push((p.cond_levels).map(x => LV[x] || x).join('/'));
+    if ((p.cond_depths || []).length) bits.push((p.cond_depths).map(x => DP[x] || x).join('/'));
+    if ((p.cond_problems || []).length) bits.push('тем: ' + p.cond_problems.length);
+    return bits.length ? bits.join(' · ') : 'подходит всем';
+  }
+
+  function renderPlaylistsList(){
+    const box = document.getElementById('pl-list');
+    if (!playlistsAll.length){
+      box.innerHTML = '<div class="note">Пока ни одного. Нажми «Новый» — и первые позиции пути будут твоими.</div>';
+      return;
+    }
+    box.innerHTML = playlistsAll.map(function(p){
+      const pinned = (p.slots || []).filter(function(s){ return s.kind === 'lecture'; }).length;
+      const rules  = (p.slots || []).length - pinned;
+      return '<div class="pr-row" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.15)">'
+        + '<div style="flex:1;min-width:0">'
+        + '<div><b>' + escapeHtmlAn(p.title) + '</b>' + (p.active ? '' : ' <span class="note">(выключен)</span>') + '</div>'
+        + '<div class="note">' + plCondSummary(p) + ' · позиций: ' + (p.slots || []).length
+        + ' (лекций ' + pinned + ', правил ' + rules + ') · порядок ' + p.sort + '</div>'
+        + '</div>'
+        + '<button class="btn btn-sm" onclick="editPlaylist(' + p.id + ')">Править</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function newPlaylist(){
+    document.getElementById('pl-editor').style.display = 'block';
+    document.getElementById('pl-editor-title').textContent = 'Новый плейлист';
+    document.getElementById('pl-id').value = '';
+    document.getElementById('pl-title').value = '';
+    document.getElementById('pl-note').value = '';
+    document.getElementById('pl-sort').value = 100;
+    document.getElementById('pl-active').checked = true;
+    document.querySelectorAll('.pl-lv, .pl-dp').forEach(function(el){ el.checked = false; });
+    plSlots = [];
+    renderCondProblems([]);
+    renderSlots();
+    document.getElementById('pl-delete').style.display = 'none';
+    document.getElementById('pl-status').textContent = '';
+  }
+
+  function editPlaylist(id){
+    const p = playlistsAll.find(function(x){ return x.id === id; });
+    if (!p) return;
+    document.getElementById('pl-editor').style.display = 'block';
+    document.getElementById('pl-editor-title').textContent = 'Правим: ' + p.title;
+    document.getElementById('pl-id').value = p.id;
+    document.getElementById('pl-title').value = p.title;
+    document.getElementById('pl-note').value = p.note || '';
+    document.getElementById('pl-sort').value = p.sort;
+    document.getElementById('pl-active').checked = !!p.active;
+    document.querySelectorAll('.pl-lv').forEach(function(el){ el.checked = (p.cond_levels || []).indexOf(el.value) >= 0; });
+    document.querySelectorAll('.pl-dp').forEach(function(el){ el.checked = (p.cond_depths || []).indexOf(el.value) >= 0; });
+    // Копия, а не ссылка: правки в редакторе не должны менять список до сохранения
+    plSlots = JSON.parse(JSON.stringify(p.slots || []));
+    renderCondProblems(p.cond_problems || []);
+    renderSlots();
+    document.getElementById('pl-delete').style.display = '';
+    document.getElementById('pl-status').textContent = '';
+  }
+
+  function closePlaylistEditor(){
+    document.getElementById('pl-editor').style.display = 'none';
+  }
+
+  /* Только живые проблемы: предложенные моделью и архивные в условия не берём —
+     на них ещё нет разметки, и плейлист по ним никому не достанется */
+  function plLiveProblems(){
+    return (problemsAll || []).filter(function(p){
+      return p.status !== 'suggested' && p.status !== 'archived';
+    });
+  }
+
+  function renderCondProblems(selected){
+    const box = document.getElementById('pl-cond-problems');
+    const live = plLiveProblems();
+    if (!live.length){
+      box.innerHTML = '<div class="note">Справочник проблем ещё не загружен.</div>';
+      return;
+    }
+    box.innerHTML = live.map(function(p){
+      const on = selected.indexOf(p.key) >= 0 ? ' checked' : '';
+      return '<label class="note" style="display:block;padding:2px 0">'
+        + '<input type="checkbox" class="pl-cp" value="' + escapeHtmlAn(p.key) + '"' + on + '> '
+        + escapeHtmlAn(p.label || p.key) + '</label>';
+    }).join('');
+  }
+
+  function addSlot(kind){
+    plSlots.push(kind === 'lecture' ? {kind:'lecture', slug:'', note:''}
+                                    : {kind:'slot', problem:'', weight:'any', note:''});
+    renderSlots();
+  }
+
+  function removeSlot(i){
+    plSlots.splice(i, 1);
+    renderSlots();
+  }
+
+  /* Порядок задаётся стрелками, а не перетаскиванием: перетаскивание на этом
+     экране пришлось бы писать с нуля, а позиций в плейлисте единицы */
+  function moveSlot(i, dir){
+    const j = i + dir;
+    if (j < 0 || j >= plSlots.length) return;
+    const t = plSlots[i]; plSlots[i] = plSlots[j]; plSlots[j] = t;
+    renderSlots();
+  }
+
+  function slotFieldChanged(i, field, value){
+    plSlots[i][field] = value;
+  }
+
+  function renderSlots(){
+    const box = document.getElementById('pl-slots');
+    if (!plSlots.length){
+      box.innerHTML = '<div class="note">Пока пусто. Добавь лекцию или правило.</div>';
+      return;
+    }
+    const lecOptions = (libraryLectures || []).map(function(l){
+      return '<option value="' + escapeHtmlAn(l.slug) + '">' + escapeHtmlAn(l.title || l.slug) + '</option>';
+    }).join('');
+    const probOptions = plLiveProblems().map(function(p){
+      return '<option value="' + escapeHtmlAn(p.key) + '">' + escapeHtmlAn(p.label || p.key) + '</option>';
+    }).join('');
+
+    box.innerHTML = plSlots.map(function(sl, i){
+      const arrows = '<button class="btn btn-sm" onclick="moveSlot(' + i + ',-1)">↑</button>'
+        + '<button class="btn btn-sm" onclick="moveSlot(' + i + ',1)">↓</button>'
+        + '<button class="btn btn-sm" onclick="removeSlot(' + i + ')">✕</button>';
+      if (sl.kind === 'lecture'){
+        return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+          + '<span class="note" style="width:22px">' + (i+1) + '.</span>'
+          + '<span class="note" style="width:70px">лекция</span>'
+          + '<select class="input" style="flex:1;min-width:180px" onchange="slotFieldChanged(' + i + ',\'slug\',this.value)">'
+          + '<option value="">— выбери лекцию —</option>' + lecOptions + '</select>'
+          + arrows + '</div>';
+      }
+      return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+        + '<span class="note" style="width:22px">' + (i+1) + '.</span>'
+        + '<span class="note" style="width:70px">правило</span>'
+        + '<select class="input" style="flex:1;min-width:160px" onchange="slotFieldChanged(' + i + ',\'problem\',this.value)">'
+        + '<option value="">— тема —</option>' + probOptions + '</select>'
+        + '<select class="input" style="width:130px" onchange="slotFieldChanged(' + i + ',\'weight\',this.value)">'
+        + '<option value="any">любая</option><option value="main">основная</option><option value="touch">вскользь</option>'
+        + '</select>'
+        + arrows + '</div>';
+    }).join('');
+
+    // Проставляем выбранное ПОСЛЕ отрисовки: значение в разметке потерялось бы
+    // при экранировании, а так select и данные всегда сходятся
+    plSlots.forEach(function(sl, i){
+      const row = box.children[i];
+      if (!row) return;
+      const sels = row.querySelectorAll('select');
+      if (sl.kind === 'lecture'){ sels[0].value = sl.slug || ''; }
+      else { sels[0].value = sl.problem || ''; sels[1].value = sl.weight || 'any'; }
+    });
+  }
+
+  async function savePlaylist(){
+    const status = document.getElementById('pl-status');
+    const body = {
+      id: document.getElementById('pl-id').value ? Number(document.getElementById('pl-id').value) : null,
+      title: document.getElementById('pl-title').value,
+      note: document.getElementById('pl-note').value,
+      active: document.getElementById('pl-active').checked,
+      sort: Number(document.getElementById('pl-sort').value) || 100,
+      cond_levels: Array.from(document.querySelectorAll('.pl-lv:checked')).map(function(el){ return el.value; }),
+      cond_depths: Array.from(document.querySelectorAll('.pl-dp:checked')).map(function(el){ return el.value; }),
+      cond_problems: Array.from(document.querySelectorAll('.pl-cp:checked')).map(function(el){ return el.value; }),
+      // Незаполненные позиции не отправляем: сервер их всё равно отбросит,
+      // но так Denis сразу видит в списке настоящее число позиций
+      slots: plSlots.filter(function(s){
+        return s.kind === 'lecture' ? !!s.slug : !!s.problem;
+      })
+    };
+    status.textContent = 'Сохраняю…';
+    try {
+      const r = await fetch(`${API_URL}/admin/playlist?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok){ status.textContent = d.detail || 'Не получилось сохранить'; return; }
+      status.textContent = 'Сохранено. Позиций: ' + (d.playlist.slots || []).length;
+      document.getElementById('pl-id').value = d.playlist.id;
+      document.getElementById('pl-delete').style.display = '';
+      loadPlaylists();
+    } catch(e){ status.textContent = 'Нет связи: ' + e.message; }
+  }
+
+  async function deletePlaylist(){
+    const id = document.getElementById('pl-id').value;
+    if (!id) return;
+    if (!confirm('Удалить плейлист? Пути, которые уже собраны у людей, не изменятся до пересборки.')) return;
+    try {
+      await fetch(`${API_URL}/admin/playlist/${id}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, { method:'DELETE' });
+      closePlaylistEditor();
+      loadPlaylists();
+    } catch(e){ alert('Нет связи: ' + e.message); }
   }
 
   async function loadProblemsAdmin(){
