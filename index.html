@@ -465,7 +465,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
         <input type="password" id="openai-key" placeholder="sk-..." />
         <button class="btn btn-sm" onclick="toggleKey('openai-key')">Показать</button>
       </div>
-      <div class="note">platform.openai.com → API keys. Один час записи ≈ $0.40 суммарно.</div>
+      <div class="note" id="openai-key-note">platform.openai.com → API keys. Один час записи ≈ $0.40 суммарно.</div>
     </div>
   </div>
 
@@ -665,6 +665,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
         <div class="key-row">
           <input type="password" id="lib-openai-key" placeholder="sk-..." />
           <button class="btn btn-sm" onclick="toggleKey('lib-openai-key')">Показать</button>
+          <div class="note" id="lib-openai-key-note"></div>
         </div>
       </div>
     </div>
@@ -1396,7 +1397,29 @@ ${tcList}
       </tbody></table>`;
   }
 
-  const API_URL = 'https://club-backend-production-fc7f.up.railway.app';
+  /* ⚠️⚠️ БОЕВОЙ АДРЕС — TIMEWEB. Здесь месяцами стоял Railway: бэкенд переехал,
+     а анализатор с тех пор не открывали, и адрес остался старым. Пронесло
+     только потому, что через него в это время не заводили лекции — иначе они
+     легли бы в мёртвую базу, и пропажу заметили бы много позже.
+     Правило: адрес бэкенда в КАЖДОМ фронтенде проверять при переезде, даже в
+     том, которым сейчас не пользуются. */
+  const API_URL = 'https://api.youselllikeagod-magazine.ru';
+  /* ⚠️ 29.08.2026: `submitPin` обращалась к `API`, а объявлен был только
+     `API_URL` — вход по пину падал на необъявленной переменной при первом же
+     нажатии. Заводим псевдоним, а не правим вызов: `API` может встретиться и
+     в будущих кусках, скопированных из дашборда, где переменная зовётся так. */
+  const API = API_URL;
+
+  /* ⚠️ ВИДНО, КУДА ПИШЕМ. Строка адреса показывается прямо в шапке: молчаливая
+     запись не в ту базу — самая дорогая из возможных ошибок этой страницы. */
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      const метка = document.createElement('div');
+      метка.style.cssText = 'position:fixed;left:10px;bottom:8px;font-size:11px;opacity:.45;pointer-events:none;z-index:5';
+      метка.textContent = 'база: ' + API_URL.replace('https://','');
+      document.body.appendChild(метка);
+    } catch(e){}
+  });
   // Заполняется ТОЛЬКО после входа по пину — в файле секрета нет
   const ADMIN_TOKEN_KEY = 'analyzer_token';
   let ADMIN_TOKEN = '';
@@ -2324,6 +2347,34 @@ ${tcList}
   let pinEntered = '';
   let pinBusy = false;
 
+  /* ══ КЛЮЧ OPENAI ИЗ ПЕРЕМЕННЫХ СЕРВИСА (29.08.2026) ══════════════════════
+     [stated] Denis: «пусть тянет из переменных по-умолчанию, добавь
+     возможность свой вставить при необходимости».
+
+     ⚠️ КЛЮЧА В ЭТОМ ФАЙЛЕ НЕТ И БЫТЬ НЕ ДОЛЖНО: репозиторий анализатора
+     публичный. Ключ приезжает с бэкенда ПОСЛЕ входа по пину, тем же админским
+     токеном, которым страница и так читает базу.
+     ⚠️ РУЧНОЙ ВВОД НЕ ЛОМАЕМ: если в поле уже что-то есть — не трогаем, и всё,
+     что человек введёт сам, всегда побеждает. */
+  async function pullOpenAiKey(){
+    try {
+      const r = await fetch(API_URL + '/admin/service-key?name=openai&x_admin_token='
+                            + encodeURIComponent(ADMIN_TOKEN));
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d || !d.есть || !d.key) return;
+      ['openai-key', 'lib-openai-key'].forEach(function(id){
+        const el = document.getElementById(id);
+        if (el && !el.value.trim()) {
+          el.value = d.key;
+          el.dispatchEvent(new Event('input'));   // разблокирует кнопки готовности
+          const note = document.getElementById(id + '-note');
+          if (note) note.textContent = 'Ключ из переменных сервиса (' + (d.хвост || '') + '). Можно заменить своим.';
+        }
+      });
+    } catch(e){ /* нет ключа — работаем как раньше, руками */ }
+  }
+
   async function submitPin(){
     const err = document.getElementById('pin-error');
     pinBusy = true;
@@ -2338,7 +2389,9 @@ ${tcList}
       try { sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token); } catch(e) {}
       err.textContent = '';
       document.getElementById('pin-screen').classList.add('hidden');
-      // после входа тут ничего запускать не надо
+      // Ключ OpenAI подтягиваем сразу после входа — вставлять его руками при
+      // каждом заходе больше не нужно
+      pullOpenAiKey();
     } catch (e) {
       err.textContent = e.message;
     } finally {
