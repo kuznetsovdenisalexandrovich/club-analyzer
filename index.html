@@ -2019,6 +2019,126 @@ ${tcList}
     }
   }
 
+  /* ═══ ПРИВЯЗКА ЗАНЯТИЯ К ДНЮ РАСПИСАНИЯ ═════════════════════════════════
+     ⚠️ ЗАЧЕМ ЭТО ВООБЩЕ. У лекции в базе нет своей даты и не будет: created_at
+     это момент заливки, и архив, разобранный в сентябре, считался бы
+     сентябрьским. Настоящая дата занятия берётся из дня расписания, на котором
+     оно прошло. Отсюда же растут календарь-как-вход-в-библиотеку и отбор в
+     дайджест по периоду — без этой связи ни то, ни другое построить нечем.
+
+     ⚠️ ПРЕДЕЛА ЛИСТАНИЯ НАЗАД ЗДЕСЬ НЕТ, в отличие от аппа. В приложении три
+     месяца — разумное ограничение, а тут им пользуется один человек, и случай
+     «эфир был в мае, руки дошли в сентябре» обязан решаться листанием, а не
+     обходным путём.                                                        */
+
+  let dayPickerSlug = null;
+  let dayPickerYm = null;
+  const dayPickerCache = {};   // "YYYY-MM" → ответ /schedule, чтобы не дёргать сеть при листании туда-сюда
+
+  function ymNow(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  function ymShift(ym, delta){
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+  function ymTitle(ym){
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m-1, 1).toLocaleDateString('ru', { month:'long', year:'numeric' });
+  }
+
+  /* Строка с датой прямо в списке — видно, что уже привязано, без открывания */
+  function dateLine(l){
+    if (!l.schedule_event_id) return '<div class="note" style="margin-top:2px;opacity:.55">даты нет — в календарь и дайджест не попадёт</div>';
+    const п = dayPickerKnown[l.schedule_event_id];
+    return '<div class="note" style="margin-top:2px">' + (п ? ('📅 ' + п) : '📅 привязано к дню расписания') + '</div>';
+  }
+  const dayPickerKnown = {};   // id события → человеческая подпись, накапливается по мере листания
+
+  async function openDayPicker(slug){
+    dayPickerSlug = slug;
+    const l = libraryLectures.find(x => x.slug === slug);
+    dayPickerYm = ymNow();
+    document.getElementById('day-picker-overlay').style.display = 'flex';
+    document.getElementById('day-picker-lecture').textContent = l ? l.title : slug;
+    await renderDayPicker();
+  }
+  function closeDayPicker(){ document.getElementById('day-picker-overlay').style.display = 'none'; }
+  async function shiftDayPicker(delta){ dayPickerYm = ymShift(dayPickerYm, delta); await renderDayPicker(); }
+
+  async function renderDayPicker(){
+    const box = document.getElementById('day-picker-body');
+    document.getElementById('day-picker-month').textContent = ymTitle(dayPickerYm);
+    box.innerHTML = '<div class="empty-dict">Загружаю…</div>';
+    let data = dayPickerCache[dayPickerYm];
+    if (!data){
+      try {
+        const r = await fetch(`${API_URL}/schedule?month=${dayPickerYm}`);
+        data = await r.json();
+        dayPickerCache[dayPickerYm] = data;
+      } catch(e){ box.innerHTML = '<div class="empty-dict">Не удалось загрузить расписание</div>'; return; }
+    }
+    const lec = libraryLectures.find(x => x.slug === dayPickerSlug);
+    const текущее = lec ? lec.schedule_event_id : null;
+
+    /* ⚠️ ПОКАЗЫВАЕМ ТОЛЬКО РАЗОВЫЕ СОБЫТИЯ (source==='event'). Повторяющееся
+       правило это не день, а закономерность: у него нет своего id, привязывать
+       запись не к чему. */
+    const дни = Object.keys(data.days || {}).sort().reverse();
+    const строки = [];
+    for (const d of дни){
+      for (const ev of (data.days[d] || [])){
+        if (ev.source !== 'event') continue;
+        dayPickerKnown[ev.id] = d + (ev.title ? ' · ' + ev.title : '');
+        const занято = (ev.lectures || []).filter(x => x.slug !== dayPickerSlug);
+        const выбрано = текущее === ev.id;
+        строки.push(`<div class="slug-row" style="justify-content:space-between;${выбрано?'background:var(--lav-dim)':''}">
+          <span>
+            <span class="slug-key">${d}</span> ${ev.time ? ev.time + ' · ' : ''}${prEsc(ev.title||'без названия')}
+            ${занято.length ? `<div class="note" style="opacity:.6">уже привязано: ${занято.map(x=>prEsc(x.title)).join(', ')}</div>` : ''}
+          </span>
+          <button class="export-btn" onclick="pickDay(${ev.id})">${выбрано ? 'Это текущий' : 'Выбрать'}</button>
+        </div>`);
+      }
+    }
+    box.innerHTML = строки.length ? строки.join('')
+      : '<div class="empty-dict">В этом месяце разовых событий нет. Листай назад.</div>';
+  }
+
+  async function pickDay(eventId){
+    const slug = dayPickerSlug;
+    try {
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule_event_id: eventId }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const lec = libraryLectures.find(x => x.slug === slug);
+      if (lec) lec.schedule_event_id = eventId;
+      /* ⚠️ КЭШ МЕСЯЦА СБРАСЫВАЕМ: в нём лежит СТАРЫЙ состав записей у дней, и
+         без сброса строка «уже привязано» врала бы до перезагрузки страницы. */
+      for (const k of Object.keys(dayPickerCache)) delete dayPickerCache[k];
+      closeDayPicker();
+      renderLibraryList();
+    } catch(e){ alert('Не удалось привязать: ' + e.message); }
+  }
+
+  async function unpickDay(){
+    if (!dayPickerSlug) return;
+    const slug = dayPickerSlug;
+    try {
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule_event_id: null }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const lec = libraryLectures.find(x => x.slug === slug);
+      if (lec) lec.schedule_event_id = null;
+      for (const k of Object.keys(dayPickerCache)) delete dayPickerCache[k];
+      closeDayPicker();
+      renderLibraryList();
+    } catch(e){ alert('Не удалось снять привязку: ' + e.message); }
+  }
+
   function renderLibraryList() {
     const el = document.getElementById('lib-list');
     let rows = libActiveStream==='all' ? libraryLectures : libraryLectures.filter(l => streamPrefixOf(l.slug)===libActiveStream);
@@ -2050,11 +2170,13 @@ ${tcList}
           <span style="display:flex;gap:6px;flex-shrink:0">
             <button class="btn btn-sm" onclick="toggleLibCardEditor('${l.slug}')">Карточка</button>
             <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Выжимка' : 'Сгенерировать выжимку'}</button>
+            <button class="btn btn-sm" onclick="openDayPicker('${l.slug}')">${l.schedule_event_id ? 'Дата' : 'Привязать к дате'}</button>
           </span>
         </div>
         <div class="note">${l.slug} · ${(l.tags||[]).map(t=>'#'+t).join(' ')}</div>
         ${markLine}
         ${sizeLine}
+        ${dateLine(l)}
 
         <div id="lib-card-editor-${l.slug}" style="display:none;margin-top:14px"></div>
 
@@ -3906,5 +4028,25 @@ ${list}
     return (parsed.develops || []).filter(function(k){ return valid.indexOf(k) !== -1; });
   }
 </script>
+<!-- ВЫБОР ДНЯ РАСПИСАНИЯ. Лежит в конце документа, вне вкладок: попап не
+     должен зависеть от того, какая вкладка сейчас открыта. -->
+<div id="day-picker-overlay" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(20,17,13,.55);align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:560px;width:100%;max-height:82vh;display:flex;flex-direction:column;margin:0">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>Когда прошло занятие</span>
+      <button class="export-btn" onclick="closeDayPicker()">Закрыть</button>
+    </div>
+    <div class="note" id="day-picker-lecture" style="margin-bottom:6px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 10px">
+      <button class="btn btn-sm" onclick="shiftDayPicker(-1)">← назад</button>
+      <b id="day-picker-month" style="font-size:13px"></b>
+      <button class="btn btn-sm" onclick="shiftDayPicker(1)">вперёд →</button>
+    </div>
+    <div id="day-picker-body" style="overflow:auto;flex:1"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="export-btn" onclick="unpickDay()">Снять привязку</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
