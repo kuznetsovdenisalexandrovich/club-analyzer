@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- FILE_VERSION: analyzer-v3 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -459,6 +460,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     <div class="mode-tab tab" onclick="switchMode('digests')">Дайджесты</div>
     <div class="mode-tab tab" onclick="switchMode('problems')">Проблемы</div>
     <div class="mode-tab tab" onclick="switchMode('free')">Бесплатные</div>
+    <div class="mode-tab tab" onclick="switchMode('playlists')">Плейлисты</div>
   </div>
 
   <div class="mode-panel active" id="mode-new">
@@ -795,6 +797,126 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     </div>
     <div id="free-status" style="font-size:12px;opacity:.7;margin-bottom:10px"></div>
     <div id="free-list"></div>
+  </div>
+
+  <div class="mode-panel" id="mode-playlists" style="display:none">
+    <div class="card">
+      <div class="card-title"><span class="step-num">?</span> Зачем это</div>
+      <div class="note" style="line-height:1.5">
+        Плейлист — <b>начало</b> личного пути, собранное тобой руками. Дальше путь
+        достраивается обычным подбором по болям, так что доводить плейлист до
+        десяти позиций не нужно: сколько скуратировал, столько и пойдёт первым.<br><br>
+        Позиция бывает двух видов. <b>Лекция</b> — конкретная, всегда она.
+        <b>Правило</b> — «сюда лекцию по такой-то теме», приложение подберёт её под
+        уровень конкретного человека. Правило, под которое ничего не нашлось, молча
+        исчезает — путь не рвётся.<br><br>
+        <b>Условия</b> решают, кому плейлист достанется. Пустое условие — «подходит
+        всем». Если подходят несколько, берётся первый по порядку сортировки.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">1</span> Плейлисты</span>
+        <button class="btn btn-sm" onclick="newPlaylist()">Новый</button>
+      </div>
+      <div id="pl-list"><div class="note">Загружаю…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">3</span> Под кого плейлисты есть</span>
+        <button class="btn btn-sm" onclick="loadCoverage()">Обновить</button>
+      </div>
+      <div class="note" style="margin-bottom:8px">
+        Шесть клеток — все сочетания уровня и глубины. Клетка считается закрытой, если
+        под неё подходит плейлист <b>без условия по темам</b>: плейлист с темами
+        закрывает клетку не целиком, и записывать его сюда было бы враньём.
+      </div>
+      <div id="pl-coverage"><div class="note">Нажми «Обновить».</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+        <span><span class="step-num">4</span> Засев по архетипам</span>
+        <button class="btn btn-sm" onclick="loadPoles()">Обновить</button>
+      </div>
+      <div class="note" style="margin-bottom:8px">
+        Тест даёт человеку код из четырёх букв. Его <b>слабые стороны</b> — противоположные
+        полюса этого кода, и именно под них подбираются первые остановки карты.
+        Заполнять надо <b>восемь полюсов</b>, а не шестнадцать богов: боги — это сочетания
+        осей, и каждый соберётся сам.
+      </div>
+      <div id="pl-poles"><div class="note">Нажми «Обновить».</div></div>
+      <div class="card-title" style="margin-top:14px"><span class="step-num">5</span> Что достанется каждому</div>
+      <div class="note" style="margin-bottom:8px">
+        Сначала те, кому достанется меньше всего — это и есть дырки.
+      </div>
+      <div id="pl-gods"><div class="note">—</div></div>
+    </div>
+
+    <div class="card" id="pl-editor" style="display:none">
+      <div class="card-title"><span class="step-num">2</span> <span id="pl-editor-title">Новый плейлист</span></div>
+      <input type="hidden" id="pl-id">
+      <input class="input" type="text" id="pl-title" placeholder="Название — для тебя, участник его не видит" style="margin-bottom:8px">
+      <textarea class="input" id="pl-note" rows="2" placeholder="Заметка для себя (необязательно)" style="margin-bottom:8px"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <label class="note">Порядок отбора <input class="input" type="number" id="pl-sort" value="100" style="width:80px;display:inline-block;margin-left:6px"></label>
+        <label class="note"><input type="checkbox" id="pl-active" checked> Включён</label>
+      </div>
+
+      <div class="note" style="margin:10px 0 4px"><b>Кому достанется</b> — ничего не отмечено значит «всем»</div>
+      <div style="margin-bottom:6px">
+        <span class="note">Уровень:</span>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="start"> только начинаю</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="some"> учили, не уверен чему</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-lv" value="pro"> уже в теме</label>
+      </div>
+      <div style="margin-bottom:6px">
+        <span class="note">Глубина:</span>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-dp" value="short"> только важное</label>
+        <label class="note" style="margin-left:8px"><input type="checkbox" class="pl-dp" value="deep"> как следует</label>
+      </div>
+      <div class="note" style="margin-bottom:4px">Темы, при которых плейлист подходит (хотя бы одна из отмеченных):</div>
+      <div id="pl-cond-problems" style="max-height:160px;overflow:auto;margin-bottom:10px"></div>
+      <!-- ⚠️ ЗАСЕВ ПО АРХЕТИПУ. Плейлист с выбранным полюсом перестаёт быть
+           обычным маршрутом и становится мини-набором под одну слабую сторону:
+           из него берётся ОДНА лекция в первые остановки карты -->
+      <div class="note" style="margin-bottom:6px"><b>Засев по архетипу</b> — необязательно</div>
+      <select class="input" id="pl-pole" style="margin-bottom:6px"></select>
+      <div class="note" id="pl-pole-hint" style="margin-bottom:10px"></div>
+
+      <div class="note" style="margin:12px 0 6px"><b>Позиции по порядку</b></div>
+      <div id="pl-slots"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+        <button class="btn btn-sm" onclick="addSlot('lecture')">+ Лекция</button>
+        <button class="btn btn-sm" onclick="addSlot('slot')">+ Правило</button>
+      </div>
+
+      <div class="note" style="margin:14px 0 6px"><b>Проверить на воображаемом участнике</b> — что реально встанет в его путь</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+        <select class="input" id="pv-level" style="width:190px">
+          <option value="">уровень: любой</option>
+          <option value="start">только начинаю</option>
+          <option value="some">учили, не уверен чему</option>
+          <option value="pro">уже в теме</option>
+        </select>
+        <select class="input" id="pv-depth" style="width:180px">
+          <option value="">глубина: любая</option>
+          <option value="short">только важное</option>
+          <option value="deep">как следует</option>
+        </select>
+        <button class="btn btn-sm" onclick="previewPlaylist()">Показать путь</button>
+      </div>
+      <div id="pl-preview"></div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" onclick="savePlaylist()">Сохранить</button>
+        <button class="btn btn-sm" onclick="closePlaylistEditor()">Закрыть</button>
+        <button class="btn btn-sm" onclick="deletePlaylist()" id="pl-delete" style="display:none">Удалить</button>
+      </div>
+      <div class="note" id="pl-status" style="margin-top:8px"></div>
+    </div>
   </div>
 
   <div class="mode-panel" id="mode-problems" style="display:none">
@@ -1316,7 +1438,7 @@ ${tcList}
     document.querySelectorAll('#result-wrap .tab-panel').forEach((p,i) => p.classList.toggle('active', names[i]===name));
   }
 
-  const MODES = ['new','library','digests','problems','free'];
+  const MODES = ['new','library','digests','problems','free','playlists'];
 
   function switchMode(name){
     MODES.forEach(m => {
@@ -1330,6 +1452,14 @@ ${tcList}
     if (name === 'digests') loadDigestsList();
     if (name === 'problems') loadProblemsAdmin();
     if (name === 'free') openFreeTab();
+    // Плейлисту нужны ОБА справочника: лекции для закреплённых позиций и
+    // проблемы для правил. Грузим оба, иначе выпадашки будут пустыми
+    if (name === 'playlists'){
+      if (!libraryLoaded) loadLibraryFromDB();
+      if (!problemsAll.length) loadProblemsAdmin();
+      loadPlaylists();
+      loadCoverage();
+    }
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
@@ -2909,6 +3039,396 @@ async function saveFreeLinks(slug){
   function problemLabel(key){
     const p = problemsAll.find(function(x){ return x.key === key; });
     return p ? p.label : key;
+  }
+
+  /* ══ ПЛЕЙЛИСТЫ ══════════════════════════════════════════════════════════
+     Плейлист — курированное НАЧАЛО личного пути; дальше приложение достраивает
+     путь обычным подбором по болям. Поэтому здесь нет требования «заполни
+     десять позиций»: сколько скуратировал, столько и пойдёт первым.
+
+     ⚠️ СЛОТЫ ХРАНЯТСЯ В ПАМЯТИ РЕДАКТОРА и уходят на сервер ЦЕЛИКОМ одним
+     списком. Правки по одному слоту отдельными запросами не делаем: порядок
+     позиций — главное содержимое плейлиста, и он должен сохраняться как
+     единое целое, а не собираться из гонки нескольких запросов. */
+  let playlistsAll = [];
+  let plSlots = [];
+
+  async function loadPlaylists(){
+    const box = document.getElementById('pl-list');
+    try {
+      const r = await fetch(`${API_URL}/admin/playlists?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      if (!r.ok) throw new Error('сервер ответил ' + r.status);
+      const d = await r.json();
+      playlistsAll = d.playlists || [];
+      renderPlaylistsList();
+    } catch(e){
+      box.innerHTML = '<div class="note">Не удалось загрузить: ' + escapeHtmlAn(e.message) + '</div>';
+    }
+  }
+
+  function escapeHtmlAn(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function plCondSummary(p){
+    const bits = [];
+    const LV = {start:'начинаю', some:'учили', pro:'в теме'};
+    const DP = {short:'важное', deep:'глубоко'};
+    if ((p.cond_levels || []).length) bits.push((p.cond_levels).map(x => LV[x] || x).join('/'));
+    if ((p.cond_depths || []).length) bits.push((p.cond_depths).map(x => DP[x] || x).join('/'));
+    if ((p.cond_problems || []).length) bits.push('тем: ' + p.cond_problems.length);
+    return bits.length ? bits.join(' · ') : 'подходит всем';
+  }
+
+  function renderPlaylistsList(){
+    const box = document.getElementById('pl-list');
+    if (!playlistsAll.length){
+      box.innerHTML = '<div class="note">Пока ни одного. Нажми «Новый» — и первые позиции пути будут твоими.</div>';
+      return;
+    }
+    box.innerHTML = playlistsAll.map(function(p){
+      const pinned = (p.slots || []).filter(function(s){ return s.kind === 'lecture'; }).length;
+      const rules  = (p.slots || []).length - pinned;
+      return '<div class="pr-row" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.15)">'
+        + '<div style="flex:1;min-width:0">'
+        + '<div><b>' + escapeHtmlAn(p.title) + '</b>' + (p.active ? '' : ' <span class="note">(выключен)</span>') + '</div>'
+        + '<div class="note">' + plCondSummary(p) + ' · позиций: ' + (p.slots || []).length
+        + ' (лекций ' + pinned + ', правил ' + rules + ') · порядок ' + p.sort + '</div>'
+        + '</div>'
+        + '<button class="btn btn-sm" onclick="editPlaylist(' + p.id + ')">Править</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function newPlaylist(){
+    document.getElementById('pl-editor').style.display = 'block';
+    document.getElementById('pl-editor-title').textContent = 'Новый плейлист';
+    document.getElementById('pl-id').value = '';
+    document.getElementById('pl-title').value = '';
+    document.getElementById('pl-note').value = '';
+    document.getElementById('pl-sort').value = 100;
+    document.getElementById('pl-active').checked = true;
+    document.querySelectorAll('.pl-lv, .pl-dp').forEach(function(el){ el.checked = false; });
+    plSlots = [];
+    renderCondProblems([]);
+    renderPoleSelect('');
+    renderSlots();
+    document.getElementById('pl-delete').style.display = 'none';
+    document.getElementById('pl-status').textContent = '';
+  }
+
+  function editPlaylist(id){
+    const p = playlistsAll.find(function(x){ return x.id === id; });
+    if (!p) return;
+    document.getElementById('pl-editor').style.display = 'block';
+    document.getElementById('pl-editor-title').textContent = 'Правим: ' + p.title;
+    document.getElementById('pl-id').value = p.id;
+    document.getElementById('pl-title').value = p.title;
+    document.getElementById('pl-note').value = p.note || '';
+    document.getElementById('pl-sort').value = p.sort;
+    document.getElementById('pl-active').checked = !!p.active;
+    document.querySelectorAll('.pl-lv').forEach(function(el){ el.checked = (p.cond_levels || []).indexOf(el.value) >= 0; });
+    document.querySelectorAll('.pl-dp').forEach(function(el){ el.checked = (p.cond_depths || []).indexOf(el.value) >= 0; });
+    // Копия, а не ссылка: правки в редакторе не должны менять список до сохранения
+    plSlots = JSON.parse(JSON.stringify(p.slots || []));
+    renderCondProblems(p.cond_problems || []);
+    renderPoleSelect(p.cond_pole || '');
+    renderSlots();
+    document.getElementById('pl-delete').style.display = '';
+    document.getElementById('pl-status').textContent = '';
+  }
+
+  /* PP ПОЛЮСА ОСЕЙ ТЕСТА
+     Восемь полюсов вместо шестнадцати богов: бог это КОМБИНАЦИЯ четырёх осей,
+     и его слабое место = противоположные полюса собственного кода. Полюсов 8,
+     значит 24 решения вместо 48, и каждый бог собирается сам */
+  const POLES = [
+    ['E','Эмоция','Логика'], ['L','Логика','Эмоция'],
+    ['N','Натиск','Терпение'], ['T','Терпение','Натиск'],
+    ['M','Масштаб','Фокус'], ['F','Фокус','Масштаб'],
+    ['S','Система','Импровизация'], ['I','Импровизация','Система']
+  ];
+  function renderPoleSelect(cur){
+    const sel = document.getElementById('pl-pole');
+    sel.innerHTML = '<option value="">' + '\u2014 обычный плейлист, не засев \u2014' + '</option>'
+      + POLES.map(function(p){
+          return '<option value="' + p[0] + '"' + (cur === p[0] ? ' selected' : '') + '>'
+               + 'Качает: ' + p[1] + '</option>';
+        }).join('');
+    sel.onchange = poleHint;
+    poleHint();
+  }
+  function poleHint(){
+    const v = document.getElementById('pl-pole').value;
+    const p = POLES.find(function(x){ return x[0] === v; });
+    document.getElementById('pl-pole-hint').innerHTML = p
+      ? 'Достанется тем, у кого в коде <b>' + p[2] + '</b> \u2014 значит ' + p[1].toLowerCase()
+        + ' у них проседает. Из этого набора в карту уйдёт <b>одна</b> лекция.'
+      : 'Обычный плейлист: идёт началом пути по условиям выше.';
+  }
+
+  async function loadPoles(){
+    const box = document.getElementById('pl-poles');
+    const gbox = document.getElementById('pl-gods');
+    box.innerHTML = '<div class="note">Считаю\u2026</div>';
+    try {
+      const r = await fetch(API_URL + '/admin/playlists/poles?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN));
+      const d = await r.json();
+      if (!r.ok){ box.innerHTML = '<div class="note">' + (d.detail || 'Не получилось') + '</div>'; return; }
+
+      box.innerHTML = (d.poles || []).map(function(p){
+        const ok = p.lectures > 0;
+        return '<div class="pr-row" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.15)">'
+          + '<div style="flex:1;min-width:0">'
+          + '<b>' + p.label + '</b> <span class="note">качаем тем, у кого в коде ' + p.opposite_label + '</span>'
+          + '</div><div style="flex-shrink:0">'
+          + (ok ? p.lectures + ' лекц.' : '<span style="color:#c0392b">пусто</span>')
+          + '</div></div>';
+      }).join('');
+
+      /* Сортировка «худшие сверху» приходит с сервера: дырки должны бросаться
+         в глаза, а не прятаться в конце списка */
+      gbox.innerHTML = (d.gods || []).map(function(g){
+        const full = g.seed_len >= (d.seed_max || 3);
+        return '<div class="pr-row" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.15)">'
+          + '<div style="flex:1;min-width:0">'
+          + '<b>' + g.god + '</b> <span class="note">' + g.code + ' \u00b7 проседает: '
+          + (g.weak || []).join(', ') + '</span></div>'
+          + '<div style="flex-shrink:0' + (full ? '' : ';color:#c0392b') + '">'
+          + g.seed_len + ' из ' + (d.seed_max || 3) + '</div></div>';
+      }).join('');
+    } catch (e){
+      box.innerHTML = '<div class="note">Нет связи с бэкендом: ' + (e && e.message || e) + '</div>';
+    }
+  }
+
+  function closePlaylistEditor(){
+    document.getElementById('pl-editor').style.display = 'none';
+  }
+
+  /* Только живые проблемы: предложенные моделью и архивные в условия не берём —
+     на них ещё нет разметки, и плейлист по ним никому не достанется */
+  function plLiveProblems(){
+    return (problemsAll || []).filter(function(p){
+      return p.status !== 'suggested' && p.status !== 'archived';
+    });
+  }
+
+  function renderCondProblems(selected){
+    const box = document.getElementById('pl-cond-problems');
+    const live = plLiveProblems();
+    if (!live.length){
+      box.innerHTML = '<div class="note">Справочник проблем ещё не загружен.</div>';
+      return;
+    }
+    box.innerHTML = live.map(function(p){
+      const on = selected.indexOf(p.key) >= 0 ? ' checked' : '';
+      return '<label class="note" style="display:block;padding:2px 0">'
+        + '<input type="checkbox" class="pl-cp" value="' + escapeHtmlAn(p.key) + '"' + on + '> '
+        + escapeHtmlAn(p.label || p.key) + '</label>';
+    }).join('');
+  }
+
+  function addSlot(kind){
+    plSlots.push(kind === 'lecture' ? {kind:'lecture', slug:'', note:''}
+                                    : {kind:'slot', problem:'', weight:'any', note:''});
+    renderSlots();
+  }
+
+  function removeSlot(i){
+    plSlots.splice(i, 1);
+    renderSlots();
+  }
+
+  /* Порядок задаётся стрелками, а не перетаскиванием: перетаскивание на этом
+     экране пришлось бы писать с нуля, а позиций в плейлисте единицы */
+  function moveSlot(i, dir){
+    const j = i + dir;
+    if (j < 0 || j >= plSlots.length) return;
+    const t = plSlots[i]; plSlots[i] = plSlots[j]; plSlots[j] = t;
+    renderSlots();
+  }
+
+  function slotFieldChanged(i, field, value){
+    plSlots[i][field] = value;
+  }
+
+  function renderSlots(){
+    const box = document.getElementById('pl-slots');
+    if (!plSlots.length){
+      box.innerHTML = '<div class="note">Пока пусто. Добавь лекцию или правило.</div>';
+      return;
+    }
+    const lecOptions = (libraryLectures || []).map(function(l){
+      return '<option value="' + escapeHtmlAn(l.slug) + '">' + escapeHtmlAn(l.title || l.slug) + '</option>';
+    }).join('');
+    const probOptions = plLiveProblems().map(function(p){
+      return '<option value="' + escapeHtmlAn(p.key) + '">' + escapeHtmlAn(p.label || p.key) + '</option>';
+    }).join('');
+
+    box.innerHTML = plSlots.map(function(sl, i){
+      const arrows = '<button class="btn btn-sm" onclick="moveSlot(' + i + ',-1)">↑</button>'
+        + '<button class="btn btn-sm" onclick="moveSlot(' + i + ',1)">↓</button>'
+        + '<button class="btn btn-sm" onclick="removeSlot(' + i + ')">✕</button>';
+      if (sl.kind === 'lecture'){
+        return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+          + '<span class="note" style="width:22px">' + (i+1) + '.</span>'
+          + '<span class="note" style="width:70px">лекция</span>'
+          + '<select class="input" style="flex:1;min-width:180px" onchange="slotFieldChanged(' + i + ',\'slug\',this.value)">'
+          + '<option value="">— выбери лекцию —</option>' + lecOptions + '</select>'
+          + arrows + '</div>';
+      }
+      return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+        + '<span class="note" style="width:22px">' + (i+1) + '.</span>'
+        + '<span class="note" style="width:70px">правило</span>'
+        + '<select class="input" style="flex:1;min-width:160px" onchange="slotFieldChanged(' + i + ',\'problem\',this.value)">'
+        + '<option value="">— тема —</option>' + probOptions + '</select>'
+        + '<select class="input" style="width:130px" onchange="slotFieldChanged(' + i + ',\'weight\',this.value)">'
+        + '<option value="any">любая</option><option value="main">основная</option><option value="touch">вскользь</option>'
+        + '</select>'
+        + arrows + '</div>';
+    }).join('');
+
+    // Проставляем выбранное ПОСЛЕ отрисовки: значение в разметке потерялось бы
+    // при экранировании, а так select и данные всегда сходятся
+    plSlots.forEach(function(sl, i){
+      const row = box.children[i];
+      if (!row) return;
+      const sels = row.querySelectorAll('select');
+      if (sl.kind === 'lecture'){ sels[0].value = sl.slug || ''; }
+      else { sels[0].value = sl.problem || ''; sels[1].value = sl.weight || 'any'; }
+    });
+  }
+
+  /* Предпросмотр считает СЕРВЕР — тем же кодом, каким собирается живой путь.
+     Своей копии правила здесь сознательно нет: две реализации одного подбора
+     разъезжаются, и тогда предпросмотр врал бы ровно в том, ради чего нужен.
+
+     Отправляем ЧЕРНОВИК из редактора, а не сохранённый плейлист: проверять
+     хочется до сохранения, иначе придётся сохранять заведомо сырое. */
+  /* Покрытие: под кого плейлисты уже есть, а кто останется без них.
+     Полный перебор комбинаций тут невозможен (тем десятки, наборов больше, чем
+     участников), поэтому сетка уровень × глубина плюс реальные ответы анкет. */
+  async function loadCoverage(){
+    const box = document.getElementById('pl-coverage');
+    box.innerHTML = '<div class="note">Считаю…</div>';
+    try {
+      const r = await fetch(`${API_URL}/admin/playlists/coverage?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`);
+      const d = await r.json();
+      if (!r.ok){ box.innerHTML = '<div class="note">' + escapeHtmlAn(d.detail || 'Не получилось') + '</div>'; return; }
+
+      const cells = (d.grid || []).map(function(g){
+        const has = !!g.playlist;
+        return '<div style="border:1px solid rgba(127,127,127,.2);border-radius:8px;padding:8px;'
+          + (has ? '' : 'background:rgba(232,97,74,.08);') + '">'
+          + '<div style="font-size:12px"><b>' + escapeHtmlAn(g.level_label) + '</b></div>'
+          + '<div class="note">' + escapeHtmlAn(g.depth_label) + '</div>'
+          + '<div style="margin-top:4px;font-size:12px">'
+          + (has ? '\u2713 ' + escapeHtmlAn(g.playlist) : '\u2014 плейлиста нет')
+          + '</div>'
+          + '<div class="note">людей: ' + g.people
+          + (g.people ? ' \u00b7 с плейлистом: ' + g.covered : '') + '</div>'
+          + '</div>';
+      }).join('');
+
+      const themes = (d.themes || []).length
+        ? '<div class="note" style="margin:12px 0 4px"><b>Самые частые темы у участников</b></div>'
+          + d.themes.map(function(t){
+              return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(127,127,127,.12)">'
+                + '<span' + (t.has_playlist ? '' : ' style="opacity:.7"') + '>'
+                + (t.has_playlist ? '\u2713 ' : '\u00b7 ') + escapeHtmlAn(t.label) + '</span>'
+                + '<span class="note">' + t.people + '</span></div>';
+            }).join('')
+        : '';
+
+      box.innerHTML =
+        '<div class="note" style="margin-bottom:8px">Анкету прошли: <b>' + d.answered + '</b>'
+        + ' \u00b7 активных плейлистов: <b>' + d.playlists_active + '</b>'
+        + (d.uncovered
+            ? ' \u00b7 <b style="color:#e8614a">без плейлиста останутся ' + d.uncovered + '</b>'
+            : (d.answered ? ' \u00b7 всем есть что показать' : ''))
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">' + cells + '</div>'
+        + themes;
+    } catch(e){ box.innerHTML = '<div class="note">Нет связи: ' + escapeHtmlAn(e.message) + '</div>'; }
+  }
+
+  async function previewPlaylist(){
+    const box = document.getElementById('pl-preview');
+    box.innerHTML = '<div class="note">Считаю…</div>';
+    const body = {
+      slots: plSlots.filter(function(s){ return s.kind === 'lecture' ? !!s.slug : !!s.problem; }),
+      level: document.getElementById('pv-level').value,
+      depth: document.getElementById('pv-depth').value,
+      problems: Array.from(document.querySelectorAll('.pl-cp:checked')).map(function(el){ return el.value; })
+    };
+    if (!body.slots.length){
+      box.innerHTML = '<div class="note">Сначала добавь хотя бы одну позицию.</div>';
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/admin/playlist/preview?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok){ box.innerHTML = '<div class="note">' + escapeHtmlAn(d.detail || 'Не получилось') + '</div>'; return; }
+      let n = 0;
+      box.innerHTML = '<div class="note" style="margin-bottom:6px">Встанет позиций: <b>' + d.filled + '</b>'
+        + (d.empty ? ', пустых: <b>' + d.empty + '</b>' : '')
+        + '. Дальше путь достроится подбором по болям.</div>'
+        + (d.items || []).map(function(it){
+            const label = it.ok ? (++n) + '. ' + escapeHtmlAn(it.title) : '— ' + escapeHtmlAn(it.title || 'пусто');
+            const kind = it.kind === 'lecture' ? 'закреплена' : 'правило: ' + escapeHtmlAn(it.problem || '');
+            return '<div style="padding:4px 0;border-bottom:1px solid rgba(127,127,127,.12)">'
+              + '<div' + (it.ok ? '' : ' style="opacity:.6"') + '>' + label + '</div>'
+              + '<div class="note">' + kind + (it.reason ? ' · ' + escapeHtmlAn(it.reason) : '') + '</div></div>';
+          }).join('');
+    } catch(e){ box.innerHTML = '<div class="note">Нет связи: ' + escapeHtmlAn(e.message) + '</div>'; }
+  }
+
+  async function savePlaylist(){
+    const status = document.getElementById('pl-status');
+    const body = {
+      id: document.getElementById('pl-id').value ? Number(document.getElementById('pl-id').value) : null,
+      title: document.getElementById('pl-title').value,
+      note: document.getElementById('pl-note').value,
+      active: document.getElementById('pl-active').checked,
+      sort: Number(document.getElementById('pl-sort').value) || 100,
+      cond_levels: Array.from(document.querySelectorAll('.pl-lv:checked')).map(function(el){ return el.value; }),
+      cond_depths: Array.from(document.querySelectorAll('.pl-dp:checked')).map(function(el){ return el.value; }),
+      cond_problems: Array.from(document.querySelectorAll('.pl-cp:checked')).map(function(el){ return el.value; }),
+      cond_pole: document.getElementById('pl-pole').value || '',
+      // Незаполненные позиции не отправляем: сервер их всё равно отбросит,
+      // но так Denis сразу видит в списке настоящее число позиций
+      slots: plSlots.filter(function(s){
+        return s.kind === 'lecture' ? !!s.slug : !!s.problem;
+      })
+    };
+    status.textContent = 'Сохраняю…';
+    try {
+      const r = await fetch(`${API_URL}/admin/playlist?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok){ status.textContent = d.detail || 'Не получилось сохранить'; return; }
+      status.textContent = 'Сохранено. Позиций: ' + (d.playlist.slots || []).length;
+      document.getElementById('pl-id').value = d.playlist.id;
+      document.getElementById('pl-delete').style.display = '';
+      loadPlaylists();
+    } catch(e){ status.textContent = 'Нет связи: ' + e.message; }
+  }
+
+  async function deletePlaylist(){
+    const id = document.getElementById('pl-id').value;
+    if (!id) return;
+    if (!confirm('Удалить плейлист? Пути, которые уже собраны у людей, не изменятся до пересборки.')) return;
+    try {
+      await fetch(`${API_URL}/admin/playlist/${id}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, { method:'DELETE' });
+      closePlaylistEditor();
+      loadPlaylists();
+    } catch(e){ alert('Нет связи: ' + e.message); }
   }
 
   async function loadProblemsAdmin(){
