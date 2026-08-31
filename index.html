@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v3 -->
+<!-- FILE_VERSION: analyzer-v4 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -623,6 +623,22 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
           </div>
           <div id="current-insights-status" class="note"></div>
           <div id="current-insights-list"></div>
+        </div>
+
+        <!-- ТРЕТИЙ ПРОХОД: ВОПРОСЫ УЧАСТНИКОВ.
+             Заданный на занятии вопрос — самый ценный кусок записи: он написан
+             не нами, а человеком, и отвечать на него уже не надо. Ответ в
+             выпуске НЕ пересказываем целиком: даём суть и минуту в записи. -->
+        <div class="result-block">
+          <div class="result-block-label">
+            <span>Вопросы участников — из транскрипта</span>
+            <span style="display:flex;gap:6px">
+              <button class="export-btn" onclick="extractQuestionsForCurrent()">Вытащить вопросы</button>
+              <button class="export-btn" onclick="sendQuestionsToDigest('current')">Отметить в выпуск</button>
+            </span>
+          </div>
+          <div id="current-questions-status" class="note"></div>
+          <div id="current-questions-list"></div>
         </div>
       </div>
 
@@ -1322,8 +1338,9 @@ ${tcList}
 - phrase: пример фразы — ТОЛЬКО если Денис в транскрипте реально даёт готовую формулировку, например явно отвечает на вопрос "как это сказать", говорит "например..." или отвечает конкретным примером на вопрос участника. Возьми её дословно или близко к дословному из транскрипта.
   Денис НЕ всегда даёт пример — часто он просто рассуждает о жизни или рассказывает анекдотичную концепцию без готовой фразы-скрипта. В этом случае НЕ ВЫДУМЫВАЙ пример — оставь phrase пустой строкой "".
 - timecode: выбери БЛИЖАЙШИЙ подходящий таймкод из списка выше (просто скопируй его time, ничего не выдумывай)
+- rank: "main" для мыслей, которые сильны САМИ ПО СЕБЕ — их можно вынести отдельной страницей журнала и они будут понятны человеку, не слушавшему лекцию. "side" для всех остальных: полезных, но живущих в контексте занятия. Главных на лекцию обычно одна-две, редко три. Не раздавай "main" щедро — если главных больше трёх, ты ошибся.
 
-Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"","timecode":"0:00"}]}`;
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"","timecode":"0:00","rank":"side"}]}`;
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1363,6 +1380,10 @@ ${tcList}
     return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:8px" data-idx="${idx}">
       <div style="display:flex;gap:8px;align-items:center">
         <span class="tc-time" style="cursor:text" contenteditable="true" data-field="timecode">${ins.timecode||'0:00'}</span>
+        <select data-field="rank" title="Главная мысль забирает себе полосу в дайджесте, побочная остаётся в выжимке занятия" style="font-size:12px;padding:3px 6px;border-radius:7px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">
+          <option value="side"${ins.rank === 'main' ? '' : ' selected'}>побочная</option>
+          <option value="main"${ins.rank === 'main' ? ' selected' : ''}>главная</option>
+        </select>
         <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить мысль</button>
       </div>
       <textarea class="insight-field" data-field="insight" style="width:100%;min-height:50px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${ins.insight||''}</textarea>
@@ -1406,12 +1427,177 @@ ${tcList}
     const el = document.getElementById(containerId);
     return Array.from(el.querySelectorAll('.tc-item')).map(row => {
       const phraseField = row.querySelector('[data-field="phrase"]');
+      const rankField = row.querySelector('[data-field="rank"]');
       return {
         timecode: row.querySelector('[data-field="timecode"]').textContent.trim(),
         insight:  row.querySelector('[data-field="insight"]').value.trim(),
         phrase:   phraseField ? phraseField.value.trim() : '', // блока нет — значит для этой мысли примера нет, и это осознанный выбор
+        // ⚠️ РАНГ ЧИТАЕТ ДАЙДЖЕСТ: главная забирает себе полосу выпуска, побочная
+        // остаётся в выжимке занятия. Строка старого формата рангом не обладает —
+        // пишем 'side', а не пустоту: неразмеченный месяц не должен оставить
+        // выпуск вовсе без идей, побочными он доберёт
+        rank:     rankField && rankField.value === 'main' ? 'main' : 'side',
       };
     }).filter(i => i.insight);
+  }
+
+
+  /* ═══ ВОПРОСЫ УЧАСТНИКОВ — ТРЕТИЙ ПРОХОД ПО ТРАНСКРИПТУ ═══════════════
+     Первый проход даёт описание и таймкоды, второй — выжимку мыслей, третий
+     достаёт вопросы, которые люди задали вживую, и ответ на них.
+
+     ⚠️ РЯДОМ С ВЫЖИМКОЙ, А НЕ ВМЕСТО НЕЁ. Просить одну модель разом и мысли, и
+     вопросы — верный способ получить и то и другое хуже: разбор мыслей идёт
+     по всей длине и обобщает, а вопрос надо взять дословно вместе с минутой.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  let currentQuestions = [];
+
+  async function extractQuestions(apiKey, transcript, timecodes, title) {
+    const tcList = (timecodes||[]).map(t => `${t.time} — ${t.label}`).join('\n') || '(таймкоды не заданы)';
+    const prompt = `Ты разбираешь запись занятия Дениса (эксперт по продажам и маркетингу) под названием "${title||''}".
+
+Полный транскрипт:
+---
+${transcript}
+---
+
+Таймкоды занятия:
+${tcList}
+
+Найди ВОПРОСЫ, которые задали Денису участники, и его ответы на них.
+
+Что брать: содержательные вопросы про продажи, маркетинг, работу с клиентами, деньги, переговоры, поведение людей — то, что будет полезно и тому, кто на занятии не был.
+
+Что НЕ брать: организационные вопросы (слышно ли меня, будет ли запись, когда следующая встреча), риторические вопросы самого Дениса к аудитории, уточнения вида "правильно понял?".
+
+Для каждого:
+- question: сам вопрос, переформулированный коротко и понятно от лица участника, 1-2 предложения. Не копируй сбивчивую устную речь дословно, но и не меняй смысл
+- answer: суть ответа Дениса, 1-3 предложения, директивно, от его лица. Это НЕ пересказ всего, что он говорил, а именно суть
+- timecode: ближайший подходящий таймкод из списка выше, просто скопируй его time
+
+Если вопросов в записи нет вовсе — верни пустой список, не выдумывай.
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"questions": [{"question":"...","answer":"...","timecode":"0:00"}]}`;
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 4000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      const msg = e.error?.message || r.statusText;
+      const hint = r.status === 429 ? ' — подожди минуту (лимит токенов в минуту) и попробуй ещё раз' : '';
+      throw new Error('GPT-4o: ' + msg + hint);
+    }
+    const data = await r.json();
+    const raw = data.choices[0].message.content;
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    return parsed.questions || [];
+  }
+
+  function questionRowHtml(q, idx) {
+    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:8px" data-qidx="${idx}">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="tc-time" style="cursor:text" contenteditable="true" data-field="qtime">${q.timecode||'0:00'}</span>
+        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" class="q-pick" checked> в выпуск
+        </label>
+        <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить</button>
+      </div>
+      <textarea data-field="question" style="width:100%;min-height:44px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${q.question||''}</textarea>
+      <textarea data-field="answer" style="width:100%;min-height:44px;font-size:13px;font-family:var(--body);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${q.answer||''}</textarea>
+    </div>`;
+  }
+
+  function renderQuestionsList(containerId, questions) {
+    const el = document.getElementById(containerId);
+    if (!questions || !questions.length) {
+      el.innerHTML = '<div style="color:var(--text-faint);font-size:13px">Вопросов пока нет — нажми "Вытащить вопросы"</div>';
+      return;
+    }
+    el.innerHTML = '<div class="tc-list">' + questions.map((q, i) => questionRowHtml(q, i)).join('') + '</div>';
+  }
+
+  async function extractQuestionsForCurrent() {
+    const key = document.getElementById('openai-key').value.trim();
+    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
+    if (!currentResult || !currentTranscript) { alert('Сначала проанализируй видео'); return; }
+    const statusEl = document.getElementById('current-questions-status');
+    statusEl.textContent = 'Ищу вопросы...';
+    try {
+      currentQuestions = await extractQuestions(key, currentTranscript, currentTimecodes, currentResult.title);
+      renderQuestionsList('current-questions-list', currentQuestions);
+      statusEl.textContent = currentQuestions.length
+        ? `Нашлось ${currentQuestions.length}. Поправь формулировки и отметь, какие берём в выпуск.`
+        : 'Вопросов в записи не нашлось.';
+    } catch (e) {
+      statusEl.textContent = '';
+      alert(e.message);
+    }
+  }
+
+  function collectQuestions(containerId) {
+    const el = document.getElementById(containerId);
+    return Array.from(el.querySelectorAll('.tc-item')).map(row => ({
+      picked:   row.querySelector('.q-pick').checked,
+      timecode: row.querySelector('[data-field="qtime"]').textContent.trim(),
+      question: row.querySelector('[data-field="question"]').value.trim(),
+      answer:   row.querySelector('[data-field="answer"]').value.trim(),
+    })).filter(q => q.question);
+  }
+
+  /* Вопросы уезжают В ЛЕНТУ ДАЙДЖЕСТА, а не в отдельное хранилище: лента и есть
+     единственный источник выпуска, и вопрос там ничем не отличается от занятия
+     или новости — у него свой род и своя вёрстка.
+
+     ⚠️ КЛЮЧ ДЕДУПЛИКАЦИИ — ОТ ТЕКСТА ВОПРОСА, А НЕ ОТ НОМЕРА В СПИСКЕ. Номер
+     сдвигается, стоит снять галочку с одного вопроса и отправить заново: ключ
+     `qa:lesson15:1` достался бы уже ДРУГОМУ вопросу и молча затёр прежний.
+     Отпечаток текста даёт тот же ключ для того же вопроса при любой выборке. */
+
+  function qFingerprint(text) {
+    let h = 0;
+    const s = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+    return Math.abs(h).toString(36);
+  }
+
+  async function sendQuestionsToDigest(where) {
+    const containerId = where === 'current' ? 'current-questions-list' : 'lib-questions-' + where;
+    const statusId    = where === 'current' ? 'current-questions-status' : 'lib-qstatus-' + where;
+    const slug = where === 'current' ? (currentResult && currentResult.slug ? currentResult.slug : '') : where;
+    const title = where === 'current' ? (currentResult ? currentResult.title : '') : where;
+    const list = collectQuestions(containerId).filter(q => q.picked);
+    const statusEl = document.getElementById(statusId);
+    if (!list.length) { statusEl.textContent = 'Ни один вопрос не отмечен'; return; }
+    statusEl.textContent = 'Отправляю...';
+    let ушло = 0, обновлено = 0;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      try {
+        const r = await fetch(API_URL + '/admin/digest/events?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ref_key: 'qa:' + (slug || 'lecture') + ':' + qFingerprint(q.question),
+            type_code: 'qa',
+            title: q.question.slice(0, 160),
+            text: q.answer,
+            weight: 2,
+            visible: true,
+            meta: { question: q.question, timecode: q.timecode, slug: slug, lecture: title },
+          }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        if (d.updated) обновлено++; else ушло++;
+      } catch (e) { /* один сбойный вопрос не должен обрывать всю отправку */ }
+    }
+    statusEl.textContent = `В ленте дайджеста: новых ${ушло}, обновлено ${обновлено}.`
+      + (ушло + обновлено < list.length ? ` Не доехало: ${list.length - ушло - обновлено}.` : '');
   }
 
   async function generateInsightsForCurrent() {
