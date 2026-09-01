@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v4 -->
+<!-- FILE_VERSION: analyzer-v5 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -2007,6 +2007,36 @@ ${tcList}
      Поэтому тип берём ИЗ ОТВЕТА сервера, а не из file.type — браузеры на mp3
      выдают то audio/mpeg, то audio/mp3, то пустую строку. */
 
+  /* ⚠️ ТА ЖЕ РУЧКА, ЧТО У АУДИО, отличается только видом (`kind: image`) — иначе
+     появилось бы второе место, где чинить подпись, срок ссылки и адрес.
+     ⚠️ Картинку НЕ ужимаем: полосы дайджеста снимаются кадром 810×1080, а экран
+     телефона вдвое плотнее — сжатая до «как на карточке» на листе будет мылом. */
+  async function handleCoverUpload(slug, file) {
+    if (!file) return;
+    const statusEl = document.getElementById('lc-image-status-' + slug);
+    const setStatus = function(t){ if (statusEl) statusEl.textContent = t; };
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    if (['jpg','jpeg','png','webp'].indexOf(ext) === -1) {
+      setStatus('Формат .' + ext + ' не поддерживается'); return;
+    }
+    setStatus('Запрашиваю адрес…');
+    try {
+      const r = await fetch(API_URL + '/admin/audio-upload-url?x_admin_token=' + encodeURIComponent(ADMIN_TOKEN), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: slug, ext: ext, kind: 'image' })
+      });
+      const d = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+      setStatus('Заливаю…');
+      const up = await fetch(d.upload_url, {
+        method: 'PUT', headers: { 'Content-Type': d.content_type }, body: file });
+      if (!up.ok) throw new Error('хранилище ответило ' + up.status);
+      const поле = document.getElementById('lc-image-' + slug);
+      if (поле) поле.value = d.public_url;
+      setStatus('Готово — не забудь сохранить карточку');
+    } catch (e) { setStatus('Не вышло: ' + e.message); }
+  }
+
   async function handleAudioUpload(slug, file) {
     if (!file) return;
     var statusEl = document.getElementById('lc-audio-status-' + slug);
@@ -2634,6 +2664,17 @@ ${tcList}
       <div class="field"><label>Ссылка ТГ</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-link-${slug}" value="${l.link||''}"></div>
       <div class="field"><label>Ссылка ВК</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-linkvk-${slug}" value="${l.link_vk||''}"></div>
       <div class="field">
+        <label>Картинка занятия — обложка в библиотеке и на полосах дайджеста</label>
+        <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-image-${slug}" value="${(l.image_url||'').replace(/"/g,'&quot;')}" placeholder="https://…/lecture-covers/…">
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+          <input type="file" accept="image/*" id="lc-imagefile-${slug}" style="display:none"
+                 onchange="handleCoverUpload('${slug}', this.files[0])">
+          <button class="btn btn-sm" onclick="document.getElementById('lc-imagefile-${slug}').click()">Загрузить картинку</button>
+          ${(l.image_url||'') ? '<img src="' + (l.image_url||'').replace(/"/g,'&quot;') + '" style="height:44px;border-radius:6px">' : ''}
+          <span class="note" id="lc-image-status-${slug}" style="flex:1;min-width:140px"></span>
+        </div>
+      </div>
+      <div class="field">
         <label>Аудиоверсия (mp3) — питает подкаст-плеер в приложении</label>
         <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-audio-${slug}" value="${(l.audio_url||'').replace(/"/g,'&quot;')}" placeholder="https://club-audio.s3.twcstorage.ru/audio/...">
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
@@ -2682,6 +2723,7 @@ ${tcList}
       link: document.getElementById('lc-link-'+slug).value.trim(),
       link_vk: document.getElementById('lc-linkvk-'+slug).value.trim(),
       audio_url: document.getElementById('lc-audio-'+slug).value.trim(),
+      image_url: document.getElementById('lc-image-'+slug).value.trim(),
       type: document.getElementById('lc-type-'+slug).value.trim() || 'lecture',
       duration_minutes: parseInt(document.getElementById('lc-duration-'+slug).value, 10) || null,
       timecodes: timecodesFromText(document.getElementById('lc-timecodes-'+slug).value),
