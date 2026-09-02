@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v5 -->
+<!-- FILE_VERSION: analyzer-v6 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -1951,7 +1951,7 @@ ${tcList}
       ${cover
         ? `<img src="${cover}" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">`
         : `<div class="upload-zone" style="padding:20px"><div class="upload-label">Обложки пока нет</div></div>`}
-      <input type="file" accept="image/*" style="display:none" id="cover-input-${key}" onchange="handleCoverUpload('${key}', this.files[0])">
+      <input type="file" accept="image/*" style="display:none" id="cover-input-${key}" onchange="handleStreamCoverUpload('${key}', this.files[0])">
       <button class="btn btn-sm" onclick="document.getElementById('cover-input-${key}').click()">${cover ? 'Редактировать обложку' : 'Загрузить обложку'}</button>
       <div class="note" id="cover-status-${key}"></div>
     </div>`;
@@ -2011,7 +2011,12 @@ ${tcList}
      появилось бы второе место, где чинить подпись, срок ссылки и адрес.
      ⚠️ Картинку НЕ ужимаем: полосы дайджеста снимаются кадром 810×1080, а экран
      телефона вдвое плотнее — сжатая до «как на карточке» на листе будет мылом. */
-  async function handleCoverUpload(slug, file) {
+  /* ⚠️ ИМЯ РАЗВЕДЕНО С ОБЛОЖКОЙ ПОТОКА (02.09.2026). Обе функции назывались
+     `handleCoverUpload`, и вторая молча переопределяла первую: нажатие
+     «загрузить картинку» у ЗАНЯТИЯ уходило в ручку обложки ПОТОКА, слаг
+     занятия подставлялся как ключ потока — картинка занятия не появлялась
+     вовсе, зато в списке потоков заводился фантом. */
+  async function handleLectureImageUpload(slug, file) {
     if (!file) return;
     const statusEl = document.getElementById('lc-image-status-' + slug);
     const setStatus = function(t){ if (statusEl) statusEl.textContent = t; };
@@ -2098,7 +2103,7 @@ ${tcList}
     }
   }
 
-  async function handleCoverUpload(key, file) {
+  async function handleStreamCoverUpload(key, file) {
     if (!file) return;
     const statusEl = document.getElementById('cover-status-'+key);
     statusEl.textContent = 'Сжимаю и коммичу в GitHub...';
@@ -2668,7 +2673,7 @@ ${tcList}
         <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-image-${slug}" value="${(l.image_url||'').replace(/"/g,'&quot;')}" placeholder="https://…/lecture-covers/…">
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
           <input type="file" accept="image/*" id="lc-imagefile-${slug}" style="display:none"
-                 onchange="handleCoverUpload('${slug}', this.files[0])">
+                 onchange="handleLectureImageUpload('${slug}', this.files[0])">
           <button class="btn btn-sm" onclick="document.getElementById('lc-imagefile-${slug}').click()">Загрузить картинку</button>
           ${(l.image_url||'') ? '<img src="' + (l.image_url||'').replace(/"/g,'&quot;') + '" style="height:44px;border-radius:6px">' : ''}
           <span class="note" id="lc-image-status-${slug}" style="flex:1;min-width:140px"></span>
