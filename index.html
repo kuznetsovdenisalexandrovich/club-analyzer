@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v6 -->
+<!-- FILE_VERSION: analyzer-v7 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -649,6 +649,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
             <span style="display:flex;gap:6px">
               <button class="export-btn" onclick="copyTranscript()">Копировать</button>
               <button class="export-btn" onclick="exportTranscriptTxt()">.txt</button>
+              <button class="export-btn" onclick="exportWordsJson()">тайминги слов .json</button>
               <button class="export-btn" onclick="exportTranscriptMd()">.md</button>
             </span>
           </div>
@@ -1044,6 +1045,10 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 
   let currentResult = null;
   let currentTranscript = '';
+  // Пословные отметки живут только в этой вкладке: в базу они не уезжают —
+  // на часовом занятии это десятки тысяч записей, и там им не место.
+  // Нужны субтитрам, поэтому выгружаются отдельным файлом
+  let currentWords = [];
   let currentTimecodes = [];
   let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
 
@@ -1134,6 +1139,11 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       fd.append('language','ru');
       fd.append('response_format','verbose_json');
       fd.append('timestamp_granularities[]','segment');
+      // ⚠️ ПОСЛОВНЫЕ ОТМЕТКИ (05.09.2026). Нужны субтитрам: в вертикалках текст
+      // идёт по два-три слова, а из отрезков по 5-10 секунд такого не собрать.
+      // Whisper отдаёт их в том же ответе и бесплатно — не просить их было
+      // просто потерей
+      fd.append('timestamp_granularities[]','word');
 
       const wRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method:'POST',
@@ -1149,10 +1159,32 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       const wData = await wRes.json();
       const transcript = wData.text || '';
       const segments   = wData.segments || [];
+      currentWords     = wData.words || [];
 
-      currentTranscript = transcript;
+      // ⚠️⚠️ ГЛАВНОЕ ИЗМЕНЕНИЕ v7: ТРАНСКРИПТ СОХРАНЯЕТСЯ С МЕТКАМИ ВРЕМЕНИ.
+      // Раньше отметки Whisper жили ровно до конца этой функции: из них
+      // собиралась подсказка для GPT, и дальше они выбрасывались — а в базу
+      // уезжал сплошной текст без единой отметки. Из-за этого нельзя было ни
+      // вырезать кусок занятия, ни собрать субтитры: время в тексте
+      // отсутствовало как класс, и его приходилось угадывать долей от
+      // длительности.
+      //
+      // ⚠️ КЛАДЁМ ПРЯМО В ТЕКСТ, А НЕ В НОВОЕ ПОЛЕ. Отдельная колонка означала бы
+      // правку базы и схем — общих файлов, которые правит другая ветка. Метка в
+      // начале строки не мешает ни поиску (`ilike` по-прежнему находит слова),
+      // ни ИИ-ответам, а разбирается одной регуляркой.
+      //
+      // ⚠️ СТАРЫЕ ЗАНЯТИЯ ОСТАЮТСЯ БЕЗ МЕТОК — и это нормально: всё, что читает
+      // транскрипт, обязано работать с обоими видами. Заново их не
+      // перерасшифровываем, разметятся при следующем проходе
+      const stamped = segments.length
+        ? segments.map(sg => `[${fmtTime(sg.start)}] ${(sg.text || '').trim()}`).join('\n')
+        : transcript;
+
+      currentTranscript = stamped;
       setStage('s1','done','Файл получен');
-      setStage('s2','done',`Транскрипт готов (${transcript.length} символов, ${segments.length} сегментов)`);
+      setStage('s2','done',`Транскрипт готов (${transcript.length} символов, ${segments.length} сегментов`
+        + (currentWords.length ? `, ${currentWords.length} слов с таймингом)` : ', пословных отметок нет)'));
 
       setStage('s3','active','Анализируем через GPT-4o-mini...');
 
@@ -1164,6 +1196,8 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       const segSummary = segments
         .map(s => `[${fmtTime(s.start)}] ${s.text.trim().slice(0, 60)}`)
         .join('\n');
+      // (подсказка остаётся укороченной — в неё идут первые 60 знаков отрезка,
+      // тогда как в базу уезжает полный размеченный текст)
 
       const slugInstruction = slug
         ? `ОБЯЗАТЕЛЬНО используй именно этот slug, не придумывай свой: "${slug}"`
@@ -1649,6 +1683,16 @@ ${tcList}
   }
 
   function copyTranscript() { navigator.clipboard.writeText(currentTranscript); }
+
+  function exportWordsJson() {
+    if (!currentWords.length) {
+      alert('Пословных отметок нет. Они появляются только после свежей расшифровки в этой вкладке — у занятий, разобранных раньше, их нет.');
+      return;
+    }
+    const данные = currentWords.map(w => ({ w: w.word, s: +(w.start||0).toFixed(2), e: +(w.end||0).toFixed(2) }));
+    const имя = (currentResult && currentResult.slug) || 'lecture';
+    download(JSON.stringify({ slug: имя, words: данные }, null, 0), `${имя}_words.json`, 'application/json');
+  }
 
   function exportTranscriptTxt() {
     if (!currentResult) return;
