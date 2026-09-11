@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v7 -->
+<!-- FILE_VERSION: analyzer-v8 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -547,6 +547,14 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       <div class="result-header">
         <div class="result-title">Карточка готова (уже в словаре)</div>
         <div class="result-actions">
+          <!-- ⚠️ АРХИВ — НЕ НОВИНКА (11.09.2026). Denis грузит архив и новые записи
+               вместе: без галочки старое занятие, залитое сегодня, попадает в
+               полосу «новинки» дайджеста, зажигает огонёк «новое» у всех и
+               встаёт над настоящими новыми на полке -->
+          <label class="note" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-right:6px"
+                 title="Старое занятие: на полку, в поиск и в план — но не в новинки и не под огонёк «новое»">
+            <input type="checkbox" id="current-archive"> Архив
+          </label>
           <button class="copy-btn" onclick="copyJson()">Копировать JSON</button>
           <button class="copy-btn" onclick="uploadOneToDB()" style="color:var(--green)">Загрузить в базу</button>
         </div>
@@ -1831,6 +1839,7 @@ ${tcList}
       level: entry.level || '',
       depth: entry.depth || '',
       vibe: entry.vibe || '',
+      is_archive: !!entry.is_archive,
     };
     const exists = await lectureExists(entry.slug);
     const url = exists ? `${API_URL}/lectures/${entry.slug}` : `${API_URL}/lectures`;
@@ -1854,6 +1863,9 @@ ${tcList}
     // иначе правки последней минуты просто не доедут
     currentResult.develops = collectDevelops();
     currentResult.develops_note = developsNote();
+    // Галочка «Архив» — тоже с формы в словарь перед отправкой
+    const archBox = document.getElementById('current-archive');
+    currentResult.is_archive = !!(archBox && archBox.checked);
     syncProblemsToResult('res');
     addToDict();
     const entry = dictionary.find(d => d.slug === currentResult.slug) || currentResult;
@@ -2734,6 +2746,10 @@ ${tcList}
           <span class="note" id="lc-audio-status-${slug}" style="flex:1;min-width:140px"></span>
         </div>
       </div>
+      <label class="note" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:6px 0 10px"
+             title="Старое занятие: на полку, в поиск и в план — но не в новинки и не под огонёк «новое»">
+        <input type="checkbox" id="lc-archive-${slug}" ${l.is_archive ? 'checked' : ''}> Архив — не показывать как новинку
+      </label>
       <div style="display:flex;gap:10px">
         <div class="field" style="flex:1"><label>Тип</label><input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-type-${slug}" value="${l.type||'lecture'}"></div>
         <div class="field" style="flex:1"><label>Длительность (мин)</label><input type="number" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-duration-${slug}" value="${l.duration_minutes||''}"></div>
@@ -2776,6 +2792,7 @@ ${tcList}
       type: document.getElementById('lc-type-'+slug).value.trim() || 'lecture',
       duration_minutes: parseInt(document.getElementById('lc-duration-'+slug).value, 10) || null,
       timecodes: timecodesFromText(document.getElementById('lc-timecodes-'+slug).value),
+      is_archive: !!(document.getElementById('lc-archive-'+slug) && document.getElementById('lc-archive-'+slug).checked),
       ...markupPayload('lib-' + slug),
     };
     try {
