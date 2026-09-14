@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v8 -->
+<!-- FILE_VERSION: analyzer-v9 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -1258,7 +1258,26 @@ ${slugInstruction}
       const raw   = gData.choices[0].message.content;
       const clean = raw.replace(/```json|```/g,'').trim();
       const card  = JSON.parse(clean);
-      if (slug) card.slug = slug; // подстраховка: если сам вписал slug — модель его не переопределит
+      if (slug) card.slug = slug;
+
+      // ⚠️ ПОСЛОВНЫЕ ТАЙМИНГИ — ВСЕ, БЕЗ ПРОРЕЖИВАНИЯ. Субтитры идут по два-три
+      // слова и требуют времени у КАЖДОГО слова: оставь каждое десятое, и резать
+      // будет не по чему. Часовое занятие даёт файл на 150-250 КБ — легче самого
+      // аудио, экономить тут нечего
+      if (currentWords.length) {
+        setStage('s4','active','Сохраняю тайминги слов...');
+        try {
+          const compact = currentWords.map(w => [
+            +((w.start||0).toFixed(2)), +((w.end||0).toFixed(2)), w.word
+          ]);
+          const wordsUrl = await uploadFactoryBlob(`words/${card.slug}`, compact);
+          currentTranscript = withMarker(currentTranscript, 'WORDS_URL', wordsUrl);
+        } catch (e) {
+          // Тайминги — вспомогательная вещь: если склад недоступен, занятие
+          // всё равно должно сохраниться с обычным транскриптом
+          console.error('пословные тайминги не сохранились:', e);
+        }
+      } // подстраховка: если сам вписал slug — модель его не переопределит
 
       card.link    = link || '(ссылка не указана)';
       card.link_vk = linkVk || '';
@@ -1268,7 +1287,13 @@ ${slugInstruction}
       // раньше она никуда не сохранялась — и проверить, не оборвался ли
       // транскрипт на середине лекции, было попросту не с чем сравнить
       card.duration_minutes = wData.duration ? Math.max(1, Math.round(wData.duration / 60)) : null;
-      card._transcript = transcript;
+      // ⚠️⚠️ БАГ, ЖИВШИЙ С v7: сюда клали СЫРОЙ `transcript` (текст Whisper без
+      // меток), хотя выше уже собран РАЗМЕЧЕННЫЙ `currentTranscript` (= `stamped`).
+      // В библиотеку уходит именно `_transcript` — то есть всё занятие,
+      // разобранное этой сессией, сохранялось БЕЗ таймкодов, а разметка жила
+      // только в JSON-экспорте и на самой странице. Нашёл GPT при независимой
+      // проверке файла
+      card._transcript = currentTranscript;
 
       currentResult    = card;
       currentTimecodes = card.timecodes || [];
@@ -1287,6 +1312,35 @@ ${slugInstruction}
       document.getElementById('run-btn').disabled = false;
       checkReady();
     }
+  }
+
+  // ⚠️ ОБЩИЙ СКЛАД ТЯЖЁЛЫХ ДОВЕСКОВ (12.09.2026): пословные тайминги и богатый
+  // разбор занятия НЕ подходят под колонку в базе — весят слишком много, и
+  // читаются целиком раз в сто реже, чем сама карточка занятия. Кладём их
+  // отдельными файлами в S3 через ЗАВОД (`/factory/blob`), а в транскрипте
+  // оставляем только ссылку строкой — тем же приёмом, что и метки времени.
+  //
+  // ⚠️ ПРО «НЕ ЖЕЧЬ ТОКЕНЫ»: этот файл никогда не попадает в промпт модели —
+  // он нужен только механической резке видео и субтитрам, поэтому его объём не
+  // стоит НИ ОДНОГО токена. Цена — только байты в S3, а это на порядок дешевле
+  // уже хранящегося там же аудио занятия.
+  async function uploadFactoryBlob(key, content) {
+    const r = await fetch(`${API_URL}/factory/blob?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, content }),
+    });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+    return d.url;
+  }
+
+  // Убирает прежнюю метку этого вида перед тем, как дописать новую — иначе
+  // повторный разбор занятия обрастал бы историей старых ссылок в транскрипте
+  function withMarker(transcript, name, url) {
+    const re = new RegExp(`\\n?\\[${name}\\][^\\n]*`, 'g');
+    const cleaned = (transcript || '').replace(re, '');
+    return url ? `${cleaned}\n[${name}] ${url}` : cleaned;
   }
 
   function fmtTime(sec) {
@@ -1400,6 +1454,115 @@ ${tcList}
     const clean = raw.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
     return parsed.insights || [];
+  }
+
+  // ── Материалы для завода: ШИРЕ и БЕЗ КВОТЫ, отдельно от выжимки/дайджеста ──
+  //
+  // [stated] Denis 12.09.2026: «1-2 мысли были нужны под одну конкретную
+  // задачу с выжимкой или дайджестом. Идея GPT в целом более полезна для
+  // анализатора и клуба в целом — пускай выжимка получает те же пару главных
+  // мыслей, а в хранилище будут более богатые анализы лекций».
+  //
+  // ⚠️ ПОЭТОМУ extractKeyInsights ВЫШЕ НЕ ТРОНУТ ВООБЩЕ — квота "1-2, редко
+  // три" и rank main/side остаются только у него, это язык дайджеста и
+  // выжимки. Здесь — параллельный проход с другими категориями (история,
+  // ошибка, сравнение, возражение, пример) и без ограничения числа: длинное
+  // занятие может дать материала на десяток единиц контента, и это нормально.
+  //
+  // ⚠️ РЕЗУЛЬТАТ НЕ ЛОЖИТСЯ В key_insights. Это отдельный склад: дайджест и
+  // выжимка читают key_insights и ждут там ровно поля insight/phrase/rank —
+  // подмешать туда десяток историй значило бы наводнить журнал материалом,
+  // для которого он не предназначен. Богатый разбор уезжает своим файлом в
+  // S3 (см. uploadFactoryBlob), а в транскрипте остаётся только ссылка.
+  async function extractContentMaterial(apiKey, transcript, title) {
+    const prompt = `Ты помогаешь Денису (эксперту по продажам и маркетингу) найти сырьё для КОРОТКИХ ПУБЛИКАЦИЙ в соцсетях по лекции "${title||''}".
+
+Транскрипт с временными метками:
+---
+${transcript}
+---
+
+Пройди ПО ВСЕЙ длине транскрипта. В отличие от выжимки для карточки, здесь НЕ НУЖНО ограничивать себя одной-двумя главными мыслями — ищи ВСЁ, что могло бы стать самостоятельным коротким роликом, постом или карточкой:
+
+- insight — сформулированный вывод или совет
+- story — история или случай из практики
+- mistake — разбор чужой или своей ошибки
+- comparison — сравнение двух подходов
+- objection — работа с возражением клиента
+- example — конкретный пример или кейс
+
+Материал должен быть способен стоять ОТДЕЛЬНО, без остального занятия. Если фрагмент понятен только в контексте предыдущих десяти минут — всё равно включи его, но отметь это (см. context_dependent).
+
+НЕ включай организационные моменты, расписание, извинения за связь — это не материал.
+
+Для каждой находки дай:
+- type: один из "insight, story, mistake, comparison, objection, example"
+- text: суть своими словами, 1-3 предложения
+- phrase: дословная или близкая к дословной цитата из транскрипта, если Денис её даёт. Не выдумывай — пустая строка, если цитаты нет
+- timecode: ближайшая метка [MM:SS] из транскрипта, где это НАЧИНАЕТСЯ
+- context_dependent: true, если фрагмент нужно предварить парой слов контекста, иначе false
+
+Верни ТОЛЬКО валидный JSON без markdown-обёртки:
+{"material": [{"type":"story","text":"...","phrase":"","timecode":"0:00","context_dependent":false}]}`;
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 6000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      const msg = e.error?.message || r.statusText;
+      const hint = r.status === 429 ? ' — подожди минуту и попробуй ещё раз' : '';
+      throw new Error('GPT-4o: ' + msg + hint);
+    }
+    const data = await r.json();
+    const raw = data.choices[0].message.content;
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    return parsed.material || [];
+  }
+
+  function hasMaterialMarker(transcript) { return /\[MATERIAL_URL\]/.test(transcript || ''); }
+
+  async function toggleLibMaterial(slug) {
+    const el = document.getElementById('lib-material-' + slug);
+    const opening = el.style.display === 'none';
+    el.style.display = opening ? 'block' : 'none';
+    if (opening) {
+      const lec = libraryLectures.find(l => l.slug === slug);
+      const has = hasMaterialMarker(lec.transcript);
+      document.getElementById('lib-material-status-' + slug).textContent =
+        has ? 'Разбор уже сохранён — можно пересобрать заново.' : 'Разбора для завода пока нет.';
+    }
+  }
+
+  async function generateLibMaterial(slug) {
+    const key = document.getElementById('lib-openai-key').value.trim();
+    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
+    const lec = libraryLectures.find(l => l.slug === slug);
+    if (!lec || !lec.transcript) { alert('У этой лекции нет сохранённого транскрипта'); return; }
+    const statusEl = document.getElementById('lib-material-status-' + slug);
+    statusEl.textContent = 'Разбираю на истории, ошибки, сравнения, возражения, примеры...';
+    try {
+      const material = await extractContentMaterial(key, lec.transcript, lec.title);
+      statusEl.textContent = `Сохраняю ${material.length} находок...`;
+      const url = await uploadFactoryBlob(`material/${slug}`, material);
+      const transcript = withMarker(lec.transcript, 'MATERIAL_URL', url);
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      lec.transcript = transcript;
+      const byType = {};
+      material.forEach(m => { byType[m.type] = (byType[m.type]||0) + 1; });
+      statusEl.textContent = `Готово — ${material.length} находок (` +
+        Object.keys(byType).map(k => `${k}: ${byType[k]}`).join(', ') + '). Сохранено в базе.';
+    } catch (e) {
+      statusEl.textContent = 'Ошибка: ' + e.message;
+    }
   }
 
   function phraseBlockHtml(phrase, autoFound) {
@@ -2650,6 +2813,7 @@ ${tcList}
     if (!rows.length) { el.innerHTML = coverHtml + '<div class="empty-dict">Ничего не найдено</div>'; return; }
     el.innerHTML = coverHtml + rows.map(l => {
       const hasInsights = (l.key_insights||[]).length > 0;
+      const hasMaterial = hasMaterialMarker(l.transcript);
       // Строка разметки прямо в списке: сразу видно, что уже сделано, а что нет —
       // без неё в длинной библиотеке непонятно, где остановился
       const marked = (l.problems || []).map(p =>
@@ -2673,6 +2837,7 @@ ${tcList}
           <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn btn-sm" onclick="toggleLibCardEditor('${l.slug}')">Карточка</button>
             <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Выжимка' : 'Сгенерировать выжимку'}</button>
+            <button class="btn btn-sm" onclick="toggleLibMaterial('${l.slug}')">${hasMaterial ? 'Материалы для завода ✓' : 'Материалы для завода'}</button>
             <button class="btn btn-sm" onclick="openDayPicker('${l.slug}')">${l.schedule_event_id ? 'Дата' : 'Дата'}</button>
           </span>
         </div>
@@ -2682,6 +2847,14 @@ ${tcList}
         ${dateLine(l)}
 
         <div id="lib-card-editor-${l.slug}" style="display:none;margin-top:14px"></div>
+
+        <div id="lib-material-${l.slug}" style="display:none;margin-top:14px">
+          <div class="note" id="lib-material-status-${l.slug}"></div>
+          <div class="note" style="margin-top:6px">Истории, ошибки, сравнения, возражения, примеры — без ограничения числа. Дайджест и выжимка эту разметку не используют.</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn-primary" style="flex:1" onclick="generateLibMaterial('${l.slug}')">${hasMaterial ? 'Пересобрать' : 'Разобрать для завода'}</button>
+          </div>
+        </div>
 
         <div id="lib-editor-${l.slug}" style="display:none;margin-top:14px">
           <div class="note" id="lib-status-${l.slug}"></div>
