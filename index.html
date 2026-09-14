@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v9 -->
+<!-- FILE_VERSION: analyzer-v10 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -538,6 +538,10 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       <div id="s2" class="stage"><span class="stage-icon">·</span> Транскрипция</div>
       <div id="s3" class="stage"><span class="stage-icon">·</span> Анализ и таймкоды (GPT-4o-mini)</div>
       <div id="s4" class="stage"><span class="stage-icon">·</span> Формирование карточки</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <button class="export-btn" onclick="retryWordsUpload()">Повторить загрузку таймингов</button>
+        <span class="note" id="words-retry-status"></span>
+      </div>
     </div>
   </div>
 
@@ -1266,16 +1270,13 @@ ${slugInstruction}
       // аудио, экономить тут нечего
       if (currentWords.length) {
         setStage('s4','active','Сохраняю тайминги слов...');
-        try {
-          const compact = currentWords.map(w => [
-            +((w.start||0).toFixed(2)), +((w.end||0).toFixed(2)), w.word
-          ]);
-          const wordsUrl = await uploadFactoryBlob(`words/${card.slug}`, compact);
-          currentTranscript = withMarker(currentTranscript, 'WORDS_URL', wordsUrl);
-        } catch (e) {
-          // Тайминги — вспомогательная вещь: если склад недоступен, занятие
-          // всё равно должно сохраниться с обычным транскриптом
-          console.error('пословные тайминги не сохранились:', e);
+        const ок = await uploadWordsFor(card.slug);
+        if (!ок) {
+          // ⚠️ РАНЬШЕ ОШИБКА УХОДИЛА ТОЛЬКО В КОНСОЛЬ, и занятие выглядело
+          // полностью обработанным — а пословных таймингов у него не было.
+          // Теперь это видно, и есть повтор без новой расшифровки
+          wordsFailedFor = card.slug;
+          setStage('s4','error','Лекция сохранена, тайминги не загрузились');
         }
       } // подстраховка: если сам вписал slug — модель его не переопределит
 
@@ -1341,6 +1342,75 @@ ${slugInstruction}
     const re = new RegExp(`\\n?\\[${name}\\][^\\n]*`, 'g');
     const cleaned = (transcript || '').replace(re, '');
     return url ? `${cleaned}\n[${name}] ${url}` : cleaned;
+  }
+
+  // Слаг занятия, у которого не залились тайминги в этой сессии
+  let wordsFailedFor = '';
+
+  // ⚠️ ПРОВЕРКА ФОРМАТА ДО ОТПРАВКИ. Битые тайминги хуже отсутствующих:
+  // отсутствие видно сразу, а отрицательное время или конец раньше начала
+  // всплывут только при нарезке, уже у завода
+  function wordsAreSane(rows) {
+    if (!Array.isArray(rows) || !rows.length) return false;
+    let прошлое = -1;
+    for (const r of rows) {
+      if (!Array.isArray(r) || r.length < 3) return false;
+      const [s0, e0, w] = r;
+      if (typeof s0 !== 'number' || typeof e0 !== 'number') return false;
+      if (!isFinite(s0) || !isFinite(e0) || s0 < 0 || e0 < s0) return false;
+      if (!String(w || '').trim()) return false;
+      if (s0 + 0.001 < прошлое) return false;   // порядок нарушен
+      прошлое = s0;
+    }
+    return true;
+  }
+
+  // Заливка таймингов. Возвращает true/false, ошибку показывает вызывающий
+  async function uploadWordsFor(slug) {
+    if (!currentWords.length) return false;
+    const compact = currentWords.map(w => [
+      +((w.start||0).toFixed(2)), +((w.end||0).toFixed(2)), w.word
+    ]);
+    if (!wordsAreSane(compact)) {
+      console.error('пословные тайминги не прошли проверку формата');
+      return false;
+    }
+    try {
+      const wordsUrl = await uploadFactoryBlob(`words/${slug}`, compact);
+      currentTranscript = withMarker(currentTranscript, 'WORDS_URL', wordsUrl);
+      return true;
+    } catch (e) {
+      console.error('пословные тайминги не сохранились:', e);
+      return false;
+    }
+  }
+
+  // Повтор без нового распознавания — пока слова живы в этой вкладке
+  async function retryWordsUpload() {
+    const el = document.getElementById('words-retry-status');
+    if (!currentWords.length) {
+      // ⚠️ После перезагрузки страницы слова теряются безвозвратно: они
+      // нигде не хранятся. Честно об этом говорим, а не предлагаем кнопку,
+      // которая ничего не сделает
+      if (el) el.textContent = 'Данные распознавания потеряны после перезагрузки — нужен повторный разбор видео.';
+      return;
+    }
+    if (el) el.textContent = 'Загружаю...';
+    const слаг = wordsFailedFor || (currentResult && currentResult.slug);
+    if (!слаг) { if (el) el.textContent = 'Непонятно, к какому занятию — сначала сохрани лекцию.'; return; }
+    const ок = await uploadWordsFor(слаг);
+    if (!ок) { if (el) el.textContent = 'Снова не вышло. Попробуй позже.'; return; }
+    try {
+      const r = await fetch(`${API_URL}/lectures/${слаг}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: currentTranscript }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      wordsFailedFor = '';
+      if (el) el.textContent = 'Тайминги загружены и записаны в занятие.';
+    } catch (e) {
+      if (el) el.textContent = 'Тайминги загружены, но занятие не обновилось: ' + e.message;
+    }
   }
 
   function fmtTime(sec) {
@@ -1456,6 +1526,109 @@ ${tcList}
     return parsed.insights || [];
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  //  СЫРЬЁ ДЛЯ ЗАВОДА — ПРОВЕРКА ПРИВЯЗКИ К ЗАПИСИ
+  //
+  //  ⚠️ ГЛАВНОЕ РАЗЛИЧЕНИЕ: `text` — пересказ модели, `phrase`/`start_quote`/
+  //  `end_quote` — ДОСЛОВНЫЕ выдержки. Модель охотно «улучшает» речь: чинит
+  //  оговорки, склеивает разорванную фразу, меняет слово на синоним. Для
+  //  пересказа это нормально, для монтажной привязки — ложь: по такой цитате
+  //  кусок в записи не найдётся.
+  //
+  //  Поэтому статус привязки ставит КОД, а не модель. Модель просить оценить
+  //  собственную точность бессмысленно — она ответит «точно».
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const SERVICE_MARK_RE = /^\s*\[[A-Z_]+_URL\]/;
+
+  // ⚠️ Служебные строки склада НЕ отправляем модели: это ссылки, а не речь.
+  // В сохранённом транскрипте они остаются — там они и живут
+  function transcriptForModel(transcript) {
+    return String(transcript || '')
+      .split('\n')
+      .filter(line => !SERVICE_MARK_RE.test(line))
+      .join('\n');
+  }
+
+  // Сравниваем по «скелету»: без временных меток, без разнобоя пробелов,
+  // без регистра и без разницы е/ё. Всё остальное — различие по существу
+  function normalizeForMatch(text) {
+    return String(text || '')
+      .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, ' ')
+      .replace(/ё/gi, 'е')
+      .replace(/[«»""„"]/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  // ⚠️ СТАТУС СТАВИТ КОД. `verified` — нашлось ровно одно совпадение;
+  // `ambiguous` — фраза встречается несколько раз (привязка есть, но какая
+  // именно — неясно); `not_found` — дословно не нашлось, то есть модель
+  // пересказала, а не процитировала
+  function checkQuote(haystack, needle) {
+    const n = normalizeForMatch(needle);
+    if (n.length < 12) return 'not_found';   // слишком коротко, совпадёт случайно
+    const h = normalizeForMatch(haystack);
+    let from = 0, hits = 0;
+    while (hits < 2) {
+      const at = h.indexOf(n, from);
+      if (at < 0) break;
+      hits++; from = at + 1;
+    }
+    if (hits === 0) return 'not_found';
+    return hits === 1 ? 'verified' : 'ambiguous';
+  }
+
+  // Общий статус находки: худший из трёх цитат. Одна непроверенная граница
+  // делает непригодной всю привязку
+  function anchorStatusFor(haystack, item) {
+    const цитаты = [item.start_quote, item.end_quote].filter(q => String(q||'').trim());
+    if (!цитаты.length) return 'not_found';
+    const статусы = цитаты.map(q => checkQuote(haystack, q));
+    if (статусы.includes('not_found')) return 'not_found';
+    if (статусы.includes('ambiguous')) return 'ambiguous';
+    return 'verified';
+  }
+
+  // ⚠️ ДЛИННЫЕ ЛЕКЦИИ РЕЖЕМ НА ЧАСТИ С ПЕРЕКРЫТИЕМ. Часовое занятие не
+  // помещается в один ответ модели: она молча обрывает разбор на середине, и
+  // вторая половина лекции просто не попадает в сырьё. Перекрытие нужно,
+  // чтобы находка на стыке не потерялась
+  const MATERIAL_CHUNK = 28000;
+  const MATERIAL_OVERLAP = 2500;
+
+  function splitForMaterial(text) {
+    const t = String(text || '');
+    if (t.length <= MATERIAL_CHUNK) return [t];
+    const части = [];
+    let от = 0;
+    while (от < t.length) {
+      let до = Math.min(от + MATERIAL_CHUNK, t.length);
+      if (до < t.length) {
+        // режем по концу строки, чтобы не рвать реплику пополам
+        const перенос = t.lastIndexOf('\n', до);
+        if (перенос > от + MATERIAL_CHUNK / 2) до = перенос;
+      }
+      части.push(t.slice(от, до));
+      if (до >= t.length) break;
+      от = Math.max(до - MATERIAL_OVERLAP, от + 1);
+    }
+    return части;
+  }
+
+  // Перекрытие даёт повторы на стыках — схлопываем по сути и по цитате
+  function dedupeMaterial(items) {
+    const seen = new Set(), out = [];
+    for (const it of items) {
+      const ключ = it.type + '|' + normalizeForMatch(it.start_quote || it.phrase || it.text).slice(0, 80);
+      if (seen.has(ключ)) continue;
+      seen.add(ключ);
+      out.push(it);
+    }
+    return out;
+  }
+
   // ── Материалы для завода: ШИРЕ и БЕЗ КВОТЫ, отдельно от выжимки/дайджеста ──
   //
   // [stated] Denis 12.09.2026: «1-2 мысли были нужны под одну конкретную
@@ -1474,67 +1647,268 @@ ${tcList}
   // подмешать туда десяток историй значило бы наводнить журнал материалом,
   // для которого он не предназначен. Богатый разбор уезжает своим файлом в
   // S3 (см. uploadFactoryBlob), а в транскрипте остаётся только ссылка.
-  async function extractContentMaterial(apiKey, transcript, title) {
-    const prompt = `Ты помогаешь Денису (эксперту по продажам и маркетингу) найти сырьё для КОРОТКИХ ПУБЛИКАЦИЙ в соцсетях по лекции "${title||''}".
+  const MATERIAL_TYPES = ['insight','story','mistake','comparison','objection','example','qa'];
 
-Транскрипт с временными метками:
+  function materialPrompt(title, chunk, часть, всего) {
+    const хвост = всего > 1 ? ` Это часть ${часть} из ${всего}; разбирай только её.` : '';
+    return `Ты помогаешь Денису (эксперт по продажам и маркетингу) найти сырьё для КОРОТКИХ ВИДЕО и постов по лекции "${title||''}".${хвост}
+
+Расшифровка с временными метками:
 ---
-${transcript}
+${chunk}
 ---
 
-Пройди ПО ВСЕЙ длине транскрипта. В отличие от выжимки для карточки, здесь НЕ НУЖНО ограничивать себя одной-двумя главными мыслями — ищи ВСЁ, что могло бы стать самостоятельным коротким роликом, постом или карточкой:
+Ищи ЗАКОНЧЕННЫЕ ЭПИЗОДЫ, из которых можно сделать самостоятельный ролик. Числом не ограничен: в часовой лекции их бывает и двадцать.
 
-- insight — сформулированный вывод или совет
-- story — история или случай из практики
-- mistake — разбор чужой или своей ошибки
-- comparison — сравнение двух подходов
-- objection — работа с возражением клиента
-- example — конкретный пример или кейс
+Типы:
+- insight — совет или вывод. Обязательно сохрани УСЛОВИЯ ПРИМЕНЕНИЯ и существенные оговорки, если они звучат.
+- story — история или случай. Обязательно нужна РАЗВЯЗКА: чем кончилось.
+- mistake — разбор ошибки. Обязательно нужен ВЫВОД: как надо было.
+- comparison — сравнение двух подходов.
+- objection — работа с возражением клиента.
+- example — конкретный пример или кейс.
+- qa — вопрос участника и ответ на него.
 
-Материал должен быть способен стоять ОТДЕЛЬНО, без остального занятия. Если фрагмент понятен только в контексте предыдущих десяти минут — всё равно включи его, но отметь это (см. context_dependent).
+⚠️ НЕ СКЛЕИВАЙ РАЗНЫЕ ЭПИЗОДЫ В ОДИН ОБЩИЙ ТЕЗИС. Три истории про цену — это три находки, а не одна мысль «про цену». Лучше больше отдельных находок, чем один обобщённый пересказ.
 
-НЕ включай организационные моменты, расписание, извинения за связь — это не материал.
+НЕ включай организационное: расписание, приветствия, извинения за связь, обсуждение техники.
 
 Для каждой находки дай:
-- type: один из "insight, story, mistake, comparison, objection, example"
-- text: суть своими словами, 1-3 предложения
-- phrase: дословная или близкая к дословной цитата из транскрипта, если Денис её даёт. Не выдумывай — пустая строка, если цитаты нет
-- timecode: ближайшая метка [MM:SS] из транскрипта, где это НАЧИНАЕТСЯ
-- context_dependent: true, если фрагмент нужно предварить парой слов контекста, иначе false
+- type: одно из ${MATERIAL_TYPES.join(', ')}
+- text: суть СВОИМИ СЛОВАМИ, 1-3 предложения
+- phrase: самая сильная ДОСЛОВНАЯ выдержка. Скопируй её из расшифровки ТОЧНО, символ в символ, непрерывным куском. НЕ исправляй оговорки, не меняй слова, не склеивай разорванные части. Если подходящей дословной выдержки нет — пустая строка.
+- start_quote: ДОСЛОВНАЯ фраза, с которой фрагмент НАЧИНАЕТСЯ. Точно из расшифровки, 5-15 слов.
+- end_quote: ДОСЛОВНАЯ фраза, которой фрагмент ЗАКАНЧИВАЕТСЯ. Точно из расшифровки, 5-15 слов. ⚠️ Бери настоящий конец эпизода: у истории — развязку, у разбора ошибки — вывод. НЕ обрывай на самой эффектной фразе, если после неё идёт суть.
+- timecode: ближайшая метка [MM:SS] к началу — это ОРИЕНТИР, а не точка монтажа
+- context_dependent: true, если без пояснения фрагмент непонятен
+- context_note: что именно нужно объяснить зрителю. Пустая строка, если контекст не нужен.
+- question и answer: только для типа qa — пересказ вопроса и ответа своими словами.
 
-Верни ТОЛЬКО валидный JSON без markdown-обёртки:
-{"material": [{"type":"story","text":"...","phrase":"","timecode":"0:00","context_dependent":false}]}`;
+⚠️ Цитаты обязаны дословно совпадать с расшифровкой — их проверяет программа. Неточная цитата будет отброшена.
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 6000, messages: [{ role: 'user', content: prompt }] })
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(()=>({}));
-      const msg = e.error?.message || r.statusText;
-      const hint = r.status === 429 ? ' — подожди минуту и попробуй ещё раз' : '';
-      throw new Error('GPT-4o: ' + msg + hint);
+Верни ТОЛЬКО валидный JSON без markdown:
+{"material": [{"type":"story","text":"...","phrase":"...","start_quote":"...","end_quote":"...","timecode":"0:00","context_dependent":false,"context_note":"","question":"","answer":""}]}`;
+  }
+
+  // Проверка ответа модели ДО того, как он что-то заменит
+  function validateMaterial(data, finishReason) {
+    // ⚠️ ОБРЫВ ПО ЛИМИТУ — САМАЯ КОВАРНАЯ ОШИБКА: JSON приходит обрезанным,
+    // разбор падает на разборе, и без этой проверки причина выглядит как
+    // «модель ответила не по-нашему»
+    if (finishReason === 'length') {
+      throw new Error('Ответ модели оборван по лимиту — часть находок потеряна, разбор не сохранён');
     }
-    const data = await r.json();
-    const raw = data.choices[0].message.content;
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean);
-    return parsed.material || [];
+    if (!data || !Array.isArray(data.material)) {
+      throw new Error('Модель вернула не тот формат: нет списка находок');
+    }
+    const годные = [];
+    for (const it of data.material) {
+      if (!it || typeof it !== 'object') continue;
+      const type = String(it.type || '').trim();
+      const text = String(it.text || '').trim();
+      if (!MATERIAL_TYPES.includes(type) || !text) continue;
+      годные.push({
+        type,
+        text,
+        phrase: String(it.phrase || '').trim(),
+        start_quote: String(it.start_quote || '').trim(),
+        end_quote: String(it.end_quote || '').trim(),
+        timecode: String(it.timecode || '').trim(),
+        context_dependent: !!it.context_dependent,
+        context_note: String(it.context_note || '').trim(),
+        question: String(it.question || '').trim(),
+        answer: String(it.answer || '').trim(),
+      });
+    }
+    return годные;
+  }
+
+  async function extractContentMaterial(apiKey, transcript, title, onProgress) {
+    // ⚠️ Служебные строки склада модели не показываем
+    const чистый = transcriptForModel(transcript);
+    const части = splitForMaterial(чистый);
+    let собрано = [];
+    let сбои = 0;
+
+    for (let i = 0; i < части.length; i++) {
+      if (onProgress) onProgress(i + 1, части.length);
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o', max_tokens: 6000,
+          messages: [{ role: 'user', content: materialPrompt(title, части[i], i + 1, части.length) }]
+        })
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}));
+        const msg = e.error?.message || r.statusText;
+        const hint = r.status === 429 ? ' — подожди минуту и попробуй ещё раз' : '';
+        throw new Error('GPT-4o: ' + msg + hint);
+      }
+      const data = await r.json();
+      const choice = data.choices[0];
+      let parsed;
+      try {
+        parsed = JSON.parse(choice.message.content.replace(/```json|```/g,'').trim());
+      } catch (e) {
+        // ⚠️ Сбой ОДНОЙ части не отменяет остальные, но и не даёт объявить
+        // разбор полным — считаем сбои и скажем об этом честно
+        сбои++;
+        console.error(`часть ${i+1}: ответ не разобрался`, e);
+        continue;
+      }
+      try {
+        собрано = собрано.concat(validateMaterial(parsed, choice.finish_reason));
+      } catch (e) {
+        сбои++;
+        console.error(`часть ${i+1}: ${e.message}`);
+      }
+    }
+
+    собрано = dedupeMaterial(собрано);
+    // Статус привязки ставим ПО ПОЛНОЙ расшифровке: находка из первой части
+    // должна проверяться по всему тексту
+    for (const it of собрано) it.anchor_status = anchorStatusFor(чистый, it);
+
+    return { items: собрано, chunks: части.length, failed: сбои };
+  }
+
+  // ⚠️ ФОРМАТ ФАЙЛА СКЛАДА СМЕНИЛСЯ: был голый массив находок, стал объект с
+  // метаданными. Причина — заводу нужно понимать, к КАКОЙ расшифровке относится
+  // разбор: занятие могут перерасшифровать, и тогда цитаты с таймкодами
+  // перестанут соответствовать записи, а по массиву это не отличить.
+  // Старый формат читается по-прежнему, см. materialItems().
+  const MATERIAL_SCHEMA = 2;
+
+  function transcriptFingerprint(text) {
+    // Простой отпечаток: версии расшифровок в системе нет, а отличить «та же»
+    // от «другая» нужно. Не для защиты, поэтому хватает дешёвого
+    let h1 = 0x811c9dc5, h2 = 0x01000193;
+    const t = String(text || '');
+    for (let i = 0; i < t.length; i++) {
+      h1 = (h1 ^ t.charCodeAt(i)) >>> 0;
+      h1 = (h1 * 0x01000193) >>> 0;
+      h2 = (h2 + t.charCodeAt(i) * (i % 31 + 1)) >>> 0;
+    }
+    return (h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0')).slice(0, 16);
+  }
+
+  // Читает ОБА формата: новый объект и старый массив
+  function materialItems(payload) {
+    if (Array.isArray(payload)) return payload;
+    return (payload && Array.isArray(payload.items)) ? payload.items : [];
+  }
+
+  // ⚠️ ВОПРОСЫ УЧАСТНИКОВ ПЕРЕИСПОЛЬЗУЕМ, А НЕ ИЩЕМ ЗАНОВО. `extractQuestions`
+  // уже отработала и стоила денег; второй проход тем же текстом дал бы те же
+  // вопросы за вторую оплату. Старое применение вопросов в дайджесте не
+  // трогаем — мы только читаем результат
+  function questionsAsMaterial(questions, haystack) {
+    return (questions || [])
+      .filter(q => String(q.question||'').trim() && String(q.answer||'').trim())
+      .map(q => {
+        const it = {
+          type: 'qa',
+          text: String(q.question).trim(),
+          // ⚠️ question/answer — ПЕРЕСКАЗ, не цитата. Помечаем это явно, иначе
+          // завод примет их за дословную речь
+          question: String(q.question).trim(),
+          answer: String(q.answer).trim(),
+          phrase: '',
+          start_quote: String(q.start_quote || '').trim(),
+          end_quote: String(q.end_quote || '').trim(),
+          timecode: String(q.timecode || '').trim(),
+          context_dependent: false,
+          context_note: '',
+          paraphrased: true,
+        };
+        it.anchor_status = anchorStatusFor(haystack, it);
+        return it;
+      });
   }
 
   function hasMaterialMarker(transcript) { return /\[MATERIAL_URL\]/.test(transcript || ''); }
 
-  async function toggleLibMaterial(slug) {
-    const el = document.getElementById('lib-material-' + slug);
-    const opening = el.style.display === 'none';
-    el.style.display = opening ? 'block' : 'none';
-    if (opening) {
-      const lec = libraryLectures.find(l => l.slug === slug);
-      const has = hasMaterialMarker(lec.transcript);
-      document.getElementById('lib-material-status-' + slug).textContent =
-        has ? 'Разбор уже сохранён — можно пересобрать заново.' : 'Разбора для завода пока нет.';
+  // Свой экранировщик: одноимённые функции в файле есть, но лежат в другой
+  // области видимости и отсюда не видны
+  function escMat(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const ANCHOR_LABEL = {
+    verified:  ['✓ привязка проверена', 'var(--green, #2e7d32)'],
+    ambiguous: ['≈ фраза встречается несколько раз', 'var(--amber, #b26a00)'],
+    not_found: ['✗ цитата не найдена дословно', 'var(--red, #b3261e)'],
+  };
+
+  const TYPE_LABEL = {
+    insight:'Мысль', story:'История', mistake:'Ошибка',
+    comparison:'Сравнение', objection:'Возражение', example:'Пример', qa:'Вопрос-ответ',
+  };
+
+  function materialItemHtml(it) {
+    const [метка, цвет] = ANCHOR_LABEL[it.anchor_status] || ANCHOR_LABEL.not_found;
+    const цитата = (it.phrase || it.start_quote || '').trim();
+    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="tc-time">${it.timecode || '—'}</span>
+        <b style="font-size:12px">${TYPE_LABEL[it.type] || it.type}</b>
+        <span style="font-size:11px;color:${цвет}">${метка}</span>
+        ${it.context_dependent ? '<span style="font-size:11px;color:var(--text-faint)">нужен контекст</span>' : ''}
+        ${it.paraphrased ? '<span style="font-size:11px;color:var(--text-faint)">пересказ</span>' : ''}
+      </div>
+      <div style="font-size:13px">${escMat(it.text || '')}</div>
+      ${цитата ? `<div style="font-size:12px;color:var(--text-faint);border-left:2px solid var(--line);padding-left:8px">${escMat(цитата)}</div>` : ''}
+      ${it.context_note ? `<div style="font-size:12px;color:var(--text-faint)">Контекст: ${escMat(it.context_note)}</div>` : ''}
+    </div>`;
+  }
+
+  function renderMaterialList(slug, items) {
+    const el = document.getElementById('lib-material-list-' + slug);
+    if (!el) return;
+    if (!items.length) {
+      el.innerHTML = '<div style="color:var(--text-faint);font-size:13px">Находок нет.</div>';
+      return;
     }
+    const сводка = {};
+    items.forEach(i => { сводка[i.type] = (сводка[i.type]||0)+1; });
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-faint);margin-bottom:8px">' +
+      Object.keys(сводка).map(k => `${TYPE_LABEL[k]||k}: ${сводка[k]}`).join(' · ') + '</div>' +
+      '<div class="tc-list">' + items.map(materialItemHtml).join('') + '</div>';
+  }
+
+  // Смотреть уже сохранённое — БЕЗ повторного платного разбора
+  async function loadLibMaterial(slug) {
+    const lec = libraryLectures.find(l => l.slug === slug);
+    const statusEl = document.getElementById('lib-material-status-' + slug);
+    const ссылка = (lec.transcript || '').match(/\[MATERIAL_URL\]\s*(\S+)/);
+    if (!ссылка) { statusEl.textContent = 'Разбора для завода пока нет.'; return null; }
+    statusEl.textContent = 'Открываю сохранённый разбор...';
+    try {
+      const r = await fetch(`${API_URL}/factory/pub/blob?ref=${encodeURIComponent(ссылка[1])}`, {
+        headers: { 'X-Factory-Token': (document.getElementById('lib-factory-token')?.value || '').trim() }
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const payload = await r.json();
+      const items = materialItems(payload);
+      renderMaterialList(slug, items);
+      const версия = Array.isArray(payload) ? 'старый формат' : `схема ${payload.schema}, ${payload.created_at||''}`;
+      statusEl.textContent = `Сохранено находок: ${items.length} (${версия}).`;
+      window['_material_' + slug] = payload;
+      return payload;
+    } catch (e) {
+      statusEl.textContent = 'Не удалось открыть сохранённый разбор: ' + e.message;
+      return null;
+    }
+  }
+
+  function downloadLibMaterial(slug) {
+    const payload = window['_material_' + slug];
+    if (!payload) { alert('Сначала открой сохранённый разбор'); return; }
+    download(JSON.stringify(payload, null, 2), `${slug}_material.json`, 'application/json');
   }
 
   async function generateLibMaterial(slug) {
@@ -1543,26 +1917,77 @@ ${transcript}
     const lec = libraryLectures.find(l => l.slug === slug);
     if (!lec || !lec.transcript) { alert('У этой лекции нет сохранённого транскрипта'); return; }
     const statusEl = document.getElementById('lib-material-status-' + slug);
-    statusEl.textContent = 'Разбираю на истории, ошибки, сравнения, возражения, примеры...';
+    const btn = document.getElementById('lib-material-btn-' + slug);
+    if (btn) { btn.disabled = true; }
+    statusEl.textContent = 'Разбираю...';
     try {
-      const material = await extractContentMaterial(key, lec.transcript, lec.title);
-      statusEl.textContent = `Сохраняю ${material.length} находок...`;
-      const url = await uploadFactoryBlob(`material/${slug}`, material);
+      const итог = await extractContentMaterial(key, lec.transcript, lec.title,
+        (n, всего) => { statusEl.textContent = всего > 1 ? `Разбираю часть ${n} из ${всего}...` : 'Разбираю...'; });
+
+      let items = итог.items;
+      // Вопросы участников — из уже готового результата, если он есть
+      // ⚠️ БЕРЁМ УЖЕ ВЫТАЩЕННЫЕ ВОПРОСЫ ИЗ ПАНЕЛИ, а не зовём модель второй раз.
+      // Если панель вопросов у этой лекции открыта и заполнена — её содержимое
+      // и есть готовый результат, за который уже заплачено
+      let вопросы = [];
+      try {
+        if (document.getElementById('lib-questions-' + slug)) {
+          вопросы = collectQuestions('lib-questions-' + slug);
+        }
+      } catch (e) { вопросы = []; }
+      if (вопросы.length) items = items.concat(questionsAsMaterial(вопросы, transcriptForModel(lec.transcript)));
+      items = dedupeMaterial(items);
+
+      // ⚠️ ПУСТОЙ РЕЗУЛЬТАТ — ЭТО НЕ УСПЕХ. Раньше он выглядел как «готово, 0
+      // находок», и отличить «модель ничего не нашла» от «разбор сломался»
+      // было нельзя. Прежний разбор при этом не трогаем
+      if (!items.length) {
+        statusEl.textContent = итог.failed
+          ? `Находок нет, и ${итог.failed} из ${итог.chunks} частей не разобрались. Прежний разбор не тронут.`
+          : 'Находок нет. Прежний разбор не тронут.';
+        return;
+      }
+
+      statusEl.textContent = `Сохраняю ${items.length} находок...`;
+      const payload = {
+        schema: MATERIAL_SCHEMA,
+        created_at: new Date().toISOString(),
+        analyzer: 'analyzer-v10',
+        lecture_slug: slug,
+        transcript_fingerprint: transcriptFingerprint(lec.transcript),
+        // ⚠️ Честный признак полноты: одна упавшая часть — это НЕ полный разбор
+        complete: итог.failed === 0,
+        chunks: итог.chunks,
+        failed_chunks: итог.failed,
+        items,
+      };
+      const url = await uploadFactoryBlob(`material/${slug}`, payload);
       const transcript = withMarker(lec.transcript, 'MATERIAL_URL', url);
       const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript }),
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       lec.transcript = transcript;
-      const byType = {};
-      material.forEach(m => { byType[m.type] = (byType[m.type]||0) + 1; });
-      statusEl.textContent = `Готово — ${material.length} находок (` +
-        Object.keys(byType).map(k => `${k}: ${byType[k]}`).join(', ') + '). Сохранено в базе.';
+      window['_material_' + slug] = payload;
+      renderMaterialList(slug, items);
+
+      const проверено = items.filter(i => i.anchor_status === 'verified').length;
+      statusEl.textContent = `Готово: ${items.length} находок, привязка проверена у ${проверено}.` +
+        (итог.failed ? ` ⚠️ ${итог.failed} из ${итог.chunks} частей не разобрались — разбор НЕПОЛНЫЙ.` : '');
     } catch (e) {
-      statusEl.textContent = 'Ошибка: ' + e.message;
+      // ⚠️ Ошибка не трогает сохранённый ранее разбор: он остаётся в базе
+      statusEl.textContent = 'Ошибка: ' + e.message + ' Прежний разбор не тронут.';
+    } finally {
+      if (btn) btn.disabled = false;
     }
+  }
+
+  async function toggleLibMaterial(slug) {
+    const el = document.getElementById('lib-material-' + slug);
+    const opening = el.style.display === 'none';
+    el.style.display = opening ? 'block' : 'none';
+    if (opening) await loadLibMaterial(slug);
   }
 
   function phraseBlockHtml(phrase, autoFound) {
@@ -2850,9 +3275,11 @@ ${tcList}
 
         <div id="lib-material-${l.slug}" style="display:none;margin-top:14px">
           <div class="note" id="lib-material-status-${l.slug}"></div>
-          <div class="note" style="margin-top:6px">Истории, ошибки, сравнения, возражения, примеры — без ограничения числа. Дайджест и выжимка эту разметку не используют.</div>
+          <div class="note" style="margin-top:6px">Истории, ошибки, сравнения, возражения, примеры, вопросы — без ограничения числа. Дайджест и выжимка эту разметку не используют.</div>
+          <div id="lib-material-list-${l.slug}" style="margin-top:10px"></div>
           <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn-primary" style="flex:1" onclick="generateLibMaterial('${l.slug}')">${hasMaterial ? 'Пересобрать' : 'Разобрать для завода'}</button>
+            <button class="btn-primary" style="flex:1" id="lib-material-btn-${l.slug}" onclick="generateLibMaterial('${l.slug}')">${hasMaterial ? 'Пересобрать' : 'Разобрать для завода'}</button>
+            <button class="btn btn-sm" onclick="downloadLibMaterial('${l.slug}')">Скачать JSON</button>
           </div>
         </div>
 
