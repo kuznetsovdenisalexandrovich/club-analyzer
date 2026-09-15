@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v12 -->
+<!-- FILE_VERSION: analyzer-v13 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -1507,13 +1507,24 @@ ${slugInstruction}
   // ── Ключевые мысли (второй проход поверх ПОЛНОГО транскрипта, не обрубленных
   //    60-символьных огрызков сегментов, которыми питается основной анализ) ──
 
-  async function extractKeyInsights(apiKey, transcript, timecodes, title) {
-    const tcList = (timecodes||[]).map(t => `${t.time} — ${t.label}`).join('\n') || '(таймкоды не заданы)';
-    const prompt = `Ты помогаешь Денису (эксперту по продажам и маркетингу) сделать выжимку из его лекции "${title||''}" для карточки в приложении клуба.
+  // ⚠️ ВЫЖИМКА ТЕПЕРЬ ТОЖЕ ЧАСТЯМИ. Раньше слала транскрипт целиком и на
+  // часовой лекции падала с «Request too large» НАВСЕГДА — запрос превышал
+  // потолок сам по себе, и никакое ожидание не помогало.
+  //
+  // ⚠️ КВОТА «ГЛАВНЫХ ОДНА-ДВЕ» СОХРАНЕНА, но применяется ПОСЛЕ объединения,
+  // а не внутри каждой части. Иначе на четырёх частях набралось бы восемь
+  // «главных» мыслей, и журнал с дайджестом получили бы не то, чего ждут.
+  const INSIGHT_CHUNK = 16000;
+
+  function keyInsightPrompt(title, tcList, chunk, часть, всего) {
+    const хвост = всего > 1
+      ? `\n\n⚠️ Это часть ${часть} из ${всего}. Разбирай только её. Ранг main ставь только по-настоящему главным мыслям этой части — их будет одна-две, а может не быть вовсе.`
+      : '';
+    return `Ты помогаешь Денису (эксперту по продажам и маркетингу) сделать выжимку из его лекции "${title||''}" для карточки в приложении клуба.
 
 Полный транскрипт лекции:
 ---
-${transcript}
+${chunk}
 ---
 
 Уже готовый список таймкодов этой лекции:
@@ -1534,24 +1545,70 @@ ${tcList}
 - timecode: выбери БЛИЖАЙШИЙ подходящий таймкод из списка выше (просто скопируй его time, ничего не выдумывай)
 - rank: "main" для мыслей, которые сильны САМИ ПО СЕБЕ — их можно вынести отдельной страницей журнала и они будут понятны человеку, не слушавшему лекцию. "side" для всех остальных: полезных, но живущих в контексте занятия. Главных на лекцию обычно одна-две, редко три. Не раздавай "main" щедро — если главных больше трёх, ты ошибся.
 
-Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"","timecode":"0:00","rank":"side"}]}`;
+Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"insights": [{"insight":"...","phrase":"","timecode":"0:00","rank":"side"}]}` + хвост;
+  }
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 6000, messages: [{ role: 'user', content: prompt }] })
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(()=>({}));
-      const msg = e.error?.message || r.statusText;
-      const hint = r.status === 429 ? ' — подожди минуту (лимит токенов в минуту сбрасывается раз в 60 секунд) и попробуй ещё раз' : '';
-      throw new Error('GPT-4o: ' + msg + hint);
+  async function extractKeyInsights(apiKey, transcript, timecodes, title, onProgress) {
+    const tcList = (timecodes||[]).map(t => `${t.time} — ${t.label}`).join('\n') || '(таймкоды не заданы)';
+    // Служебные строки склада модели не показываем
+    const чистый = transcriptForModel(transcript);
+
+    const части = [];
+    if (чистый.length <= INSIGHT_CHUNK) {
+      части.push(чистый);
+    } else {
+      let от = 0;
+      while (от < чистый.length) {
+        let до = Math.min(от + INSIGHT_CHUNK, чистый.length);
+        if (до < чистый.length) {
+          const перенос = чистый.lastIndexOf('\n', до);
+          if (перенос > от + INSIGHT_CHUNK / 2) до = перенос;
+        }
+        части.push(чистый.slice(от, до));
+        if (до >= чистый.length) break;
+        от = до;
+      }
     }
-    const data = await r.json();
-    const raw = data.choices[0].message.content;
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean);
-    return parsed.insights || [];
+
+    let собрано = [];
+    for (let i = 0; i < части.length; i++) {
+      if (onProgress) onProgress(i + 1, части.length, '');
+      const data = await gptCall(
+        apiKey,
+        keyInsightPrompt(title, tcList, части[i], i + 1, части.length),
+        3000,
+        { onWait: сек => onProgress && onProgress(i + 1, части.length, `жду ${сек} с — лимит токенов`) }
+      );
+      const raw = data.choices[0].message.content;
+      try {
+        const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+        собрано = собрано.concat(parsed.key_insights || []);
+      } catch (e) {
+        console.error(`выжимка, часть ${i+1}: ответ не разобрался`, e);
+      }
+    }
+
+    // ⚠️ Схлопываем повторы: на стыках частей одна мысль иногда звучит дважды
+    const seen = new Set();
+    собрано = собрано.filter(it => {
+      const ключ = String(it && it.insight || '').toLowerCase().replace(/\s+/g,' ').trim().slice(0, 60);
+      if (!ключ || seen.has(ключ)) return false;
+      seen.add(ключ);
+      return true;
+    });
+
+    // Квота главных — на весь набор, а не на часть
+    if (части.length > 1) {
+      let главных = 0;
+      собрано = собрано.map(it => {
+        if (it.rank === 'main') {
+          главных++;
+          if (главных > 2) return Object.assign({}, it, { rank: 'side' });
+        }
+        return it;
+      });
+    }
+    return собрано;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1566,6 +1623,103 @@ ${tcList}
   //  Поэтому статус привязки ставит КОД, а не модель. Модель просить оценить
   //  собственную точность бессмысленно — она ответит «точно».
   // ═══════════════════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  ОБЩИЙ ВЫЗОВ МОДЕЛИ С УЧЁТОМ ЛИМИТА ТОКЕНОВ В МИНУТУ (14.09.2026)
+  //
+  //  ⚠️ ЧТО СЛУЧИЛОСЬ. Выжимка падала с «Request too large: Limit 30000,
+  //  Requested 32756». Ключевое: запрос превышал лимит САМ ПО СЕБЕ — ждать
+  //  было бесполезно, он падал бы и через час. Прежняя подсказка «подожди
+  //  минуту» была неверной и уводила в сторону.
+  //
+  //  ⚠️ ЛИМИТ СЧИТАЕТСЯ ЗА МИНУТУ НА ВСЁ ВМЕСТЕ — вход плюс выход, все
+  //  запросы подряд. Поэтому разбор частями без учёта бюджета упирается в тот
+  //  же потолок на второй-третьей части, даже если каждая часть мелкая.
+  //
+  //  Отсюда три вещи: считать бюджет и ждать ДО отправки, дробить то, что не
+  //  влезает, и переспрашивать при отказе, разбирая, сколько ждать.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const TPM_LIMIT = 30000;          // потолок организации, токенов в минуту
+  const TPM_SAFETY = 0.85;          // запас: оценка токенов приблизительная
+  let tpmWindow = [];               // [{t: время, n: токенов}]
+
+  // Кириллица кодируется плотнее латиницы — считаем по два символа на токен
+  // с запасом в большую сторону. Недооценить хуже, чем переждать лишнее
+  function estimateTokens(text) {
+    return Math.ceil(String(text || '').length / 2);
+  }
+
+  function tpmUsed() {
+    const край = Date.now() - 60000;
+    tpmWindow = tpmWindow.filter(x => x.t > край);
+    return tpmWindow.reduce((s, x) => s + x.n, 0);
+  }
+
+  async function tpmWait(need, onWait) {
+    for (;;) {
+      const занято = tpmUsed();
+      if (занято + need <= TPM_LIMIT * TPM_SAFETY) return;
+      const ждать = Math.max(1, Math.ceil((60000 - (Date.now() - tpmWindow[0].t)) / 1000));
+      if (onWait) onWait(ждать);
+      await new Promise(r => setTimeout(r, Math.min(ждать, 10) * 1000));
+    }
+  }
+
+  // Сколько просит подождать сам OpenAI — он пишет это в тексте ошибки
+  function retryAfterFrom(msg) {
+    const m = String(msg || '').match(/try again in ([\d.]+)(ms|s)/i);
+    if (!m) return 0;
+    const v = parseFloat(m[1]);
+    return m[2].toLowerCase() === 'ms' ? Math.ceil(v / 1000) : Math.ceil(v);
+  }
+
+  async function gptCall(apiKey, prompt, maxTokens, opts) {
+    opts = opts || {};
+    const нужно = estimateTokens(prompt) + (maxTokens || 1000);
+
+    // ⚠️ ЗАПРОС БОЛЬШЕ ПОТОЛКА — отказываем СРАЗУ и внятно. Отправлять его
+    // значит гарантированно получить ошибку и потратить минуту ожидания
+    if (нужно > TPM_LIMIT) {
+      throw new Error(`Запрос слишком большой: примерно ${нужно} токенов при лимите ${TPM_LIMIT}. `
+        + 'Текст нужно разбирать частями.');
+    }
+
+    await tpmWait(нужно, opts.onWait);
+
+    for (let попытка = 0; попытка < 3; попытка++) {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: opts.model || 'gpt-4o',
+          max_tokens: maxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        // Записываем ФАКТИЧЕСКИЙ расход, если сервер его сообщил — он точнее
+        const факт = data.usage && data.usage.total_tokens;
+        tpmWindow.push({ t: Date.now(), n: факт || нужно });
+        return data;
+      }
+
+      const e = await r.json().catch(() => ({}));
+      const msg = e.error?.message || r.statusText;
+      if (r.status === 429 && попытка < 2) {
+        const пауза = retryAfterFrom(msg) || 62;
+        if (opts.onWait) opts.onWait(пауза);
+        // ⚠️ Отказ тоже съел квоту у них на стороне — учитываем и у себя
+        tpmWindow.push({ t: Date.now(), n: нужно });
+        await new Promise(res => setTimeout(res, пауза * 1000));
+        continue;
+      }
+      throw new Error('GPT-4o: ' + msg);
+    }
+    throw new Error('GPT-4o: лимит токенов не отпускает — попробуй позже');
+  }
 
   const SERVICE_MARK_RE = /^\s*\[[A-Z_]+_URL\]/;
 
@@ -1623,7 +1777,11 @@ ${tcList}
   // помещается в один ответ модели: она молча обрывает разбор на середине, и
   // вторая половина лекции просто не попадает в сырьё. Перекрытие нужно,
   // чтобы находка на стыке не потерялась
-  const MATERIAL_CHUNK = 28000;
+  // ⚠️ Уменьшено с 28000 (14.09.2026): при лимите 30000 токенов в минуту часть
+  // на 28 тысяч знаков вместе с ответом упиралась в потолок уже на второй
+  // части. 16 тысяч знаков ≈ 8 тысяч токенов входа плюс ответ — две части
+  // помещаются в минуту
+  const MATERIAL_CHUNK = 16000;
   const MATERIAL_OVERLAP = 2500;
 
   function splitForMaterial(text) {
@@ -1759,22 +1917,13 @@ ${chunk}
     let сбои = 0;
 
     for (let i = 0; i < части.length; i++) {
-      if (onProgress) onProgress(i + 1, части.length);
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o', max_tokens: 6000,
-          messages: [{ role: 'user', content: materialPrompt(title, части[i], i + 1, части.length) }]
-        })
-      });
-      if (!r.ok) {
-        const e = await r.json().catch(()=>({}));
-        const msg = e.error?.message || r.statusText;
-        const hint = r.status === 429 ? ' — подожди минуту и попробуй ещё раз' : '';
-        throw new Error('GPT-4o: ' + msg + hint);
-      }
-      const data = await r.json();
+      if (onProgress) onProgress(i + 1, части.length, '');
+      const data = await gptCall(
+        apiKey,
+        materialPrompt(title, части[i], i + 1, части.length),
+        4000,
+        { onWait: сек => onProgress && onProgress(i + 1, части.length, `жду ${сек} с — лимит токенов`) }
+      );
       const choice = data.choices[0];
       let parsed;
       try {
@@ -2112,6 +2261,7 @@ ${chunk}
   let currentQuestions = [];
 
   async function extractQuestions(apiKey, transcript, timecodes, title) {
+    transcript = transcriptForModel(transcript);
     const tcList = (timecodes||[]).map(t => `${t.time} — ${t.label}`).join('\n') || '(таймкоды не заданы)';
     const prompt = `Ты разбираешь запись занятия Дениса (эксперт по продажам и маркетингу) под названием "${title||''}".
 
@@ -2138,18 +2288,9 @@ ${tcList}
 
 Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"questions": [{"question":"...","answer":"...","timecode":"0:00"}]}`;
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 4000, messages: [{ role: 'user', content: prompt }] })
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(()=>({}));
-      const msg = e.error?.message || r.statusText;
-      const hint = r.status === 429 ? ' — подожди минуту (лимит токенов в минуту) и попробуй ещё раз' : '';
-      throw new Error('GPT-4o: ' + msg + hint);
-    }
-    const data = await r.json();
+    // ⚠️ Через общий вызов: у вопросов тот же потолок токенов в минуту, и на
+    // длинной лекции они падали ровно так же, как выжимка
+    const data = await gptCall(apiKey, prompt, 3000);
     const raw = data.choices[0].message.content;
     const clean = raw.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
@@ -5525,16 +5666,9 @@ ${PHASES.filter(function(f){ return f.active !== false; }).map(function(f){ retu
 Верни ТОЛЬКО валидный JSON без markdown-обёртки:
 {"problems":[{"key":"clients","weight":"main","timecode":"12:34"}],"new_problems":[],"level":"beginner","depth":"deep","vibe":"work"}`;
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
-    });
-    if (!r.ok){
-      const e = await r.json().catch(function(){ return {}; });
-      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
-    }
-    const data = await r.json();
+    // ⚠️ Через общий вызов: сюда тоже уходит транскрипт целиком, и на длинной
+    // лекции это тот же «Request too large», что валил выжимку
+    const data = await gptCall(apiKey, prompt, 700);
     const clean = data.choices[0].message.content.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
 
@@ -5576,16 +5710,8 @@ ${list}
 
 Верни ТОЛЬКО валидный JSON без markdown-обёртки: {"develops": ["system","focus"]}`;
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(function(){ return {}; });
-      throw new Error('GPT-4o: ' + (e.error?.message || r.statusText));
-    }
-    const data = await r.json();
+    // ⚠️ Через общий вызов: транскрипт здесь тоже целиком
+    const data = await gptCall(apiKey, prompt, 300);
     const clean = data.choices[0].message.content.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
     const valid = DEVELOPS.map(function(d){ return d.key; });
