@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v10 -->
+<!-- FILE_VERSION: analyzer-v11 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -3599,12 +3599,29 @@ ${tcList}
      ⚠️ РУЧНОЙ ВВОД НЕ ЛОМАЕМ: если в поле уже что-то есть — не трогаем, и всё,
      что человек введёт сам, всегда побеждает. */
   async function pullOpenAiKey(){
+    // ⚠️ МОЛЧАТЬ ЗДЕСЬ НЕЛЬЗЯ. Раньше любой отказ проглатывался, и пустое поле
+    // ключа ничем не отличалось от «ключа на сервере нет». Пишем причину в
+    // подпись под полем — там её и будут искать
+    function скажи(текст) {
+      ['openai-key', 'lib-openai-key'].forEach(function(id){
+        const note = document.getElementById(id + '-note');
+        if (note && !(document.getElementById(id) || {}).value) note.textContent = текст;
+      });
+    }
     try {
       const r = await fetch(API_URL + '/admin/service-key?name=openai&x_admin_token='
                             + encodeURIComponent(ADMIN_TOKEN));
-      if (!r.ok) return;
+      if (!r.ok) {
+        скажи(r.status === 403
+          ? 'Ключ не пришёл: токен не признан. Обнови страницу и введи пин заново.'
+          : 'Ключ не пришёл (сервер ответил ' + r.status + '). Впиши свой.');
+        return;
+      }
       const d = await r.json();
-      if (!d || !d.есть || !d.key) return;
+      if (!d || !d.есть || !d.key) {
+        скажи('На сервере ключа OpenAI нет — впиши свой.');
+        return;
+      }
       ['openai-key', 'lib-openai-key'].forEach(function(id){
         const el = document.getElementById(id);
         if (el && !el.value.trim()) {
@@ -3614,7 +3631,9 @@ ${tcList}
           if (note) note.textContent = 'Ключ из переменных сервиса (' + (d.хвост || '') + '). Можно заменить своим.';
         }
       });
-    } catch(e){ /* нет ключа — работаем как раньше, руками */ }
+    } catch(e){
+      скажи('Ключ не пришёл: ' + e.message + '. Впиши свой.');
+    }
   }
 
   async function submitPin(){
@@ -3675,7 +3694,15 @@ ${tcList}
     // Со старой отметкой человек проходил бы мимо пина без ключа — и каждый
     // запрос молча получал бы отказ, выглядя как поломка дашборда
     ok = !!ADMIN_TOKEN;
-    if (ok) { document.getElementById('pin-screen').classList.add('hidden'); }
+    if (ok) {
+      document.getElementById('pin-screen').classList.add('hidden');
+      // ⚠️ БАГ (14.09.2026): ключ OpenAI подтягивался ТОЛЬКО сразу после ввода
+      // пина. При возврате на страницу с живым токеном экран пина пропускался —
+      // и вместе с ним пропускалась загрузка ключа. Поля оставались пустыми,
+      // кнопка «Анализировать» — серой, и выглядело это как поломка кнопки, а
+      // не как отсутствие ключа. Вход есть вход, откуда бы он ни пришёл
+      pullOpenAiKey();
+    }
   })();
 
   /* ── Что развивает занятие ──────────────────────────────────────────────────
