@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v11 -->
+<!-- FILE_VERSION: analyzer-v12 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -527,6 +527,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   </div>
 
   <button class="btn-primary" id="run-btn" onclick="runAnalysis()" disabled>Анализировать</button>
+  <div class="note" id="run-hint" style="text-align:center;margin-top:6px"></div>
 
   <div class="error-box" id="error-box"></div>
 
@@ -1095,7 +1096,25 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => {
     e.preventDefault(); dropZone.classList.remove('drag-over');
-    handleFile(e.dataTransfer.files[0]);
+    // ⚠️⚠️ БАГ (14.09.2026): перетащенный файл КЛАДЁМ В САМО ПОЛЕ, а не просто
+    // показываем. Раньше `handleFile` только рисовал имя и размер, а разбор
+    // читает `fileInput.files[0]` — то есть при перетаскивании поле оставалось
+    // пустым, кнопка «Анализировать» не включалась, и выглядело это как
+    // поломка кнопки. Ещё подлее было так: выбрал файл кнопкой, потом
+    // перетащил другой — подпись менялась, а разбирался бы СТАРЫЙ файл.
+    // Через кнопку всё работало, поэтому баг и не замечался
+    const files = e.dataTransfer.files;
+    if (!files || !files[0]) return;
+    try {
+      fileInput.files = files;          // поддерживается всеми нынешними браузерами
+    } catch (err) {
+      // Если браузер запретит присвоение — честно скажем, а не сделаем вид
+      document.getElementById('file-name-label').textContent =
+        'Перетаскивание не сработало — выбери файл кнопкой';
+      document.getElementById('file-info').classList.add('visible');
+      return;
+    }
+    handleFile(fileInput.files[0]);
   });
 
   function handleFile(file) {
@@ -1111,8 +1130,17 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   }
 
   function checkReady() {
-    const ok = document.getElementById('openai-key').value.trim() && fileInput.files[0];
-    document.getElementById('run-btn').disabled = !ok;
+    const естьКлюч = !!document.getElementById('openai-key').value.trim();
+    const естьФайл = !!(fileInput.files && fileInput.files[0]);
+    document.getElementById('run-btn').disabled = !(естьКлюч && естьФайл);
+    // ⚠️ Серая кнопка без объяснения — это загадка. Пишем прямо, чего не хватает
+    const подпись = document.getElementById('run-hint');
+    if (подпись) {
+      подпись.textContent = (естьКлюч && естьФайл) ? ''
+        : !естьКлюч && !естьФайл ? 'Нужны ключ OpenAI и файл'
+        : !естьКлюч ? 'Не хватает ключа OpenAI'
+        : 'Не выбран файл';
+    }
   }
 
   document.getElementById('openai-key').addEventListener('input', checkReady);
