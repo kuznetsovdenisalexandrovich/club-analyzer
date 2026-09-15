@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v15 -->
+<!-- FILE_VERSION: analyzer-v17 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -1200,6 +1200,11 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       const transcript = wData.text || '';
       const segments   = wData.segments || [];
       currentWords     = wData.words || [];
+      // Новая расшифровка — новый хозяин слов; прошлый неудачный адресат
+      // повтора больше не действителен
+      wordsSlug        = '';
+      wordsFailedFor   = '';
+      wordsOkForCard   = true;
 
       // ⚠️⚠️ ГЛАВНОЕ ИЗМЕНЕНИЕ v7: ТРАНСКРИПТ СОХРАНЯЕТСЯ С МЕТКАМИ ВРЕМЕНИ.
       // Раньше отметки Whisper жили ровно до конца этой функции: из них
@@ -1298,7 +1303,9 @@ ${slugInstruction}
       // аудио, экономить тут нечего
       if (currentWords.length) {
         setStage('s4','active','Сохраняю тайминги слов...');
+        wordsSlug = card.slug;      // теперь ясно, чьи это слова
         const ок = await uploadWordsFor(card.slug);
+        wordsOkForCard = ок;
         if (!ок) {
           // ⚠️ РАНЬШЕ ОШИБКА УХОДИЛА ТОЛЬКО В КОНСОЛЬ, и занятие выглядело
           // полностью обработанным — а пословных таймингов у него не было.
@@ -1327,7 +1334,15 @@ ${slugInstruction}
       currentResult    = card;
       currentTimecodes = card.timecodes || [];
 
-      setStage('s4','done','Карточка сформирована');
+      // ⚠️ НЕ ПЕРЕКРЫВАЕМ ОШИБКУ ТАЙМИНГОВ УСПЕХОМ. Раньше строкой выше
+      // писалось «тайминги не загрузились», а сразу следом — безусловное
+      // «Карточка сформирована», и предупреждение жило полсекунды. Проблема
+      // пропускалась, а занятие уезжало в базу без пословных таймингов
+      if (currentWords.length && !wordsOkForCard) {
+        setStage('s4','error','Карточка готова, но тайминги не загрузились — нажми «Повторить загрузку таймингов»');
+      } else {
+        setStage('s4','done','Карточка сформирована');
+      }
       showResult(card, transcript, currentTimecodes);
       addToDict(); // сразу в словарь, с полным транскриптом — вручную жать не нужно
 
@@ -1373,7 +1388,12 @@ ${slugInstruction}
   }
 
   // Слаг занятия, у которого не залились тайминги в этой сессии
+  // ⚠️ У ПОСЛОВНЫХ ТАЙМИНГОВ ЕСТЬ ХОЗЯИН. `currentWords` переживают разбор
+  // следующей лекции, и без явной привязки кнопка повтора отправляла бы слова
+  // новой лекции под ключом предыдущей
   let wordsFailedFor = '';
+  let wordsSlug = '';        // чьи слова сейчас лежат в currentWords
+  let wordsOkForCard = true;
 
   // ⚠️ ПРОВЕРКА ФОРМАТА ДО ОТПРАВКИ. Битые тайминги хуже отсутствующих:
   // отсутствие видно сразу, а отрицательное время или конец раньше начала
@@ -1414,6 +1434,38 @@ ${slugInstruction}
   }
 
   // Повтор без нового распознавания — пока слова живы в этой вкладке
+  // ⚠️ ССЫЛКА ДОЛЖНА ПОПАСТЬ ВО ВСЕ КОПИИ ТРАНСКРИПТА, А НЕ ТОЛЬКО В БАЗУ.
+  // Лекция живёт в трёх местах сразу: `currentTranscript`, карточка результата
+  // и запись в локальном словаре. Повтор загрузки обновлял только базу — и
+  // следующая же отправка карточки из словаря затирала свежую ссылку старым
+  // транскриптом. То же самое с [MATERIAL_URL]
+  function syncTranscriptEverywhere(slug, transcript) {
+    // ⚠️⚠️ АКТИВНЫЙ ТРАНСКРИПТ ТРОГАЕМ ТОЛЬКО ЕСЛИ ЭТО ТА ЖЕ ЛЕКЦИЯ.
+    // Прежняя версия заменяла его безусловно: разбираешь лекцию А, в библиотеке
+    // сохраняешь материалы лекции Б — и активным становится транскрипт Б, тогда
+    // как карточка и пословные тайминги остаются от А. Следующий повтор
+    // загрузки таймингов записывал бы смесь двух лекций. Это хуже, чем
+    // несохранённая ссылка: данные перемешиваются молча
+    const тотЖе = !!slug && currentResult && currentResult.slug === slug;
+    if (тотЖе || !slug) {
+      currentTranscript = transcript;
+    }
+    if (тотЖе) {
+      currentResult._transcript = transcript;
+      currentResult.transcript = transcript;
+    }
+    const idx = dictionary.findIndex(d => d.slug === slug);
+    if (idx >= 0) {
+      dictionary[idx]._transcript = transcript;
+      dictionary[idx].transcript = transcript;
+      // Словарь живёт в localStorage — без записи правка исчезнет при обновлении
+      localStorage.setItem('club_dict', JSON.stringify(dictionary));
+    }
+    const lec = (typeof libraryLectures !== 'undefined' && libraryLectures)
+      ? libraryLectures.find(l => l.slug === slug) : null;
+    if (lec) lec.transcript = transcript;
+  }
+
   async function retryWordsUpload() {
     const el = document.getElementById('words-retry-status');
     if (!currentWords.length) {
@@ -1424,8 +1476,14 @@ ${slugInstruction}
       return;
     }
     if (el) el.textContent = 'Загружаю...';
-    const слаг = wordsFailedFor || (currentResult && currentResult.slug);
+    // ⚠️ Отправляем слова ТОЛЬКО той лекции, которой они принадлежат
+    const слаг = wordsSlug || wordsFailedFor;
     if (!слаг) { if (el) el.textContent = 'Непонятно, к какому занятию — сначала сохрани лекцию.'; return; }
+    if (currentResult && currentResult.slug && currentResult.slug !== слаг) {
+      if (el) el.textContent = `Эти тайминги от занятия «${слаг}», а открыто «${currentResult.slug}». `
+        + 'Разбери нужное занятие заново.';
+      return;
+    }
     const ок = await uploadWordsFor(слаг);
     if (!ок) { if (el) el.textContent = 'Снова не вышло. Попробуй позже.'; return; }
     try {
@@ -1435,6 +1493,8 @@ ${slugInstruction}
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       wordsFailedFor = '';
+      wordsOkForCard = true;
+      syncTranscriptEverywhere(слаг, currentTranscript);
       if (el) el.textContent = 'Тайминги загружены и записаны в занятие.';
     } catch (e) {
       if (el) el.textContent = 'Тайминги загружены, но занятие не обновилось: ' + e.message;
@@ -1849,9 +1909,14 @@ ${tcList}
   // Общий статус находки: худший из трёх цитат. Одна непроверенная граница
   // делает непригодной всю привязку
   function anchorStatusFor(haystack, item) {
-    const цитаты = [item.start_quote, item.end_quote].filter(q => String(q||'').trim());
-    if (!цитаты.length) return 'not_found';
-    const статусы = цитаты.map(q => checkQuote(haystack, q));
+    // ⚠️ НУЖНЫ ОБЕ ГРАНИЦЫ. Раньше пустой `end_quote` просто отфильтровывался,
+    // и находка с одним найденным началом получала `verified` — то есть
+    // «привязка проверена» при неизвестном конце фрагмента. Резать по такому
+    // нельзя: неизвестно, где кусок кончается
+    const начало = String(item.start_quote || '').trim();
+    const конец  = String(item.end_quote || '').trim();
+    if (!начало || !конец) return 'not_found';
+    const статусы = [начало, конец].map(q => checkQuote(haystack, q));
     if (статусы.includes('not_found')) return 'not_found';
     if (статусы.includes('ambiguous')) return 'ambiguous';
     return 'verified';
@@ -2042,17 +2107,33 @@ ${chunk}
   // Старый формат читается по-прежнему, см. materialItems().
   const MATERIAL_SCHEMA = 2;
 
-  function transcriptFingerprint(text) {
-    // Простой отпечаток: версии расшифровок в системе нет, а отличить «та же»
-    // от «другая» нужно. Не для защиты, поэтому хватает дешёвого
-    let h1 = 0x811c9dc5, h2 = 0x01000193;
-    const t = String(text || '');
-    for (let i = 0; i < t.length; i++) {
-      h1 = (h1 ^ t.charCodeAt(i)) >>> 0;
-      h1 = (h1 * 0x01000193) >>> 0;
-      h2 = (h2 + t.charCodeAt(i) * (i % 31 + 1)) >>> 0;
-    }
-    return (h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0')).slice(0, 16);
+  // ⚠️ ВЕРСИЮ БЕРЁМ ИЗ ШАПКИ ФАЙЛА, А НЕ ПИШЕМ РУКАМИ. Зашитая строка
+  // «analyzer-v10» пережила пять выпусков и врала в каждом сохранённом
+  // разборе: понять, чем он собран, было нельзя
+  function analyzerVersion() {
+    const m = document.documentElement.previousSibling &&
+              String(document.documentElement.previousSibling.textContent || '').match(/FILE_VERSION:\s*(\S+)/);
+    if (m) return m[1];
+    const html = document.head ? document.head.innerHTML : '';
+    const m2 = html.match(/FILE_VERSION:\s*(\S+)/);
+    return m2 ? m2[1] : 'analyzer-unknown';
+  }
+
+  // ⚠️⚠️ ОТПЕЧАТОК ОБЯЗАН СОВПАДАТЬ С ЗАВОДСКИМ, иначе он бесполезен: завод не
+  // сможет подтвердить, что разбор относится к нынешней расшифровке. Раньше
+  // здесь была своя самодельная свёртка, а на сервере — SHA-256, и числа не
+  // сходились никогда.
+  //
+  // ⚠️ СЧИТАЕМ ПО РЕЧИ, БЕЗ СЛУЖЕБНЫХ СТРОК. Сохранение разбора само дописывает
+  // в транскрипт строку [MATERIAL_URL] — то есть отпечаток, снятый с полного
+  // текста, устаревал бы в момент собственного сохранения. Сторона завода
+  // считает так же (factory-v13).
+  async function transcriptFingerprint(text) {
+    const речь = transcriptForModel(text);
+    const buf = new TextEncoder().encode(речь);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
   }
 
   // Читает ОБА формата: новый объект и старый массив
@@ -2110,24 +2191,65 @@ ${chunk}
     comparison:'Сравнение', objection:'Возражение', example:'Пример', qa:'Вопрос-ответ',
   };
 
-  function materialItemHtml(it) {
+  const ПОЛЕ = 'width:100%;font-size:13px;font-family:var(--body);padding:7px 9px;border-radius:8px;'
+             + 'border:1px solid var(--line);background:var(--input-bg);color:var(--text)';
+
+  // ⚠️ РЕДАКТИРУЕМАЯ НАХОДКА — как строка выжимки. Модель ошибается в цитатах
+  // и обрывает истории до развязки; без правки руками остаётся только
+  // «пересобрать всё заново» за новые деньги.
+  //
+  // ⚠️ Статус привязки НЕ редактируется и не хранится в полях: он
+  // пересчитывается кодом при сохранении. Иначе правка цитаты оставляла бы
+  // старую отметку «проверено» на новом, непроверенном тексте
+  function materialItemHtml(it, idx) {
     const [метка, цвет] = ANCHOR_LABEL[it.anchor_status] || ANCHOR_LABEL.not_found;
-    const цитата = (it.phrase || it.start_quote || '').trim();
-    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:6px">
+    const типы = Object.keys(TYPE_LABEL).map(k =>
+      `<option value="${k}"${it.type === k ? ' selected' : ''}>${TYPE_LABEL[k]}</option>`).join('');
+    return `<div class="tc-item" style="flex-direction:column;align-items:stretch;gap:6px" data-mat="${idx}">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="tc-time">${it.timecode || '—'}</span>
-        <b style="font-size:12px">${TYPE_LABEL[it.type] || it.type}</b>
-        <span style="font-size:11px;color:${цвет}">${метка}</span>
-        ${it.context_dependent ? '<span style="font-size:11px;color:var(--text-faint)">нужен контекст</span>' : ''}
+        <span class="tc-time" contenteditable="true" data-f="timecode" style="cursor:text">${escMat(it.timecode || '0:00')}</span>
+        <select data-f="type" style="font-size:12px;padding:3px 6px;border-radius:7px;border:1px solid var(--line);background:var(--input-bg);color:var(--text)">${типы}</select>
+        <span style="font-size:11px;color:${цвет}" data-anchor>${метка}</span>
+        <label style="font-size:11px;color:var(--text-faint);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" data-f="context_dependent"${it.context_dependent ? ' checked' : ''}> нужен контекст
+        </label>
         ${it.paraphrased ? '<span style="font-size:11px;color:var(--text-faint)">пересказ</span>' : ''}
+        <button class="export-btn" style="margin-left:auto;color:var(--red)" onclick="this.closest('.tc-item').remove()">Удалить</button>
       </div>
-      <div style="font-size:13px">${escMat(it.text || '')}</div>
-      ${цитата ? `<div style="font-size:12px;color:var(--text-faint);border-left:2px solid var(--line);padding-left:8px">${escMat(цитата)}</div>` : ''}
-      ${it.context_note ? `<div style="font-size:12px;color:var(--text-faint)">Контекст: ${escMat(it.context_note)}</div>` : ''}
+      <textarea data-f="text" style="${ПОЛЕ};min-height:46px" placeholder="суть своими словами">${escMat(it.text || '')}</textarea>
+      <textarea data-f="phrase" style="${ПОЛЕ};min-height:36px;color:var(--text-faint)" placeholder="дословная выдержка (необязательно)">${escMat(it.phrase || '')}</textarea>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <textarea data-f="start_quote" style="${ПОЛЕ};flex:1;min-width:180px;min-height:34px" placeholder="дословное НАЧАЛО фрагмента">${escMat(it.start_quote || '')}</textarea>
+        <textarea data-f="end_quote" style="${ПОЛЕ};flex:1;min-width:180px;min-height:34px" placeholder="дословный КОНЕЦ (с развязкой)">${escMat(it.end_quote || '')}</textarea>
+      </div>
+      <input data-f="context_note" style="${ПОЛЕ}" placeholder="что пояснить зрителю" value="${escMat(it.context_note || '')}">
     </div>`;
   }
 
+  // Считывает правки обратно, СОХРАНЯЯ поля, которых нет в форме
+  function collectMaterial(slug, исходные) {
+    const el = document.getElementById('lib-material-list-' + slug);
+    if (!el) return исходные;
+    return Array.from(el.querySelectorAll('[data-mat]')).map(row => {
+      const idx = +row.dataset.mat;
+      const было = исходные[idx] || {};
+      const v = f => {
+        const node = row.querySelector(`[data-f="${f}"]`);
+        if (!node) return '';
+        if (node.type === 'checkbox') return node.checked;
+        return (node.value !== undefined ? node.value : node.textContent).trim();
+      };
+      return Object.assign({}, было, {
+        type: v('type'), text: v('text'), phrase: v('phrase'),
+        start_quote: v('start_quote'), end_quote: v('end_quote'),
+        timecode: v('timecode'), context_note: v('context_note'),
+        context_dependent: v('context_dependent') === true,
+      });
+    }).filter(it => String(it.text || '').trim());
+  }
+
   function renderMaterialList(slug, items) {
+    window['_matbase_' + slug] = items;
     const el = document.getElementById('lib-material-list-' + slug);
     if (!el) return;
     if (!items.length) {
@@ -2139,6 +2261,7 @@ ${chunk}
     el.innerHTML = '<div style="font-size:12px;color:var(--text-faint);margin-bottom:8px">' +
       Object.keys(сводка).map(k => `${TYPE_LABEL[k]||k}: ${сводка[k]}`).join(' · ') + '</div>' +
       '<div class="tc-list">' + items.map(materialItemHtml).join('') + '</div>';
+    window['_matbase_' + slug] = items;
   }
 
   // Смотреть уже сохранённое — БЕЗ повторного платного разбора
@@ -2163,6 +2286,63 @@ ${chunk}
     } catch (e) {
       statusEl.textContent = 'Не удалось открыть сохранённый разбор: ' + e.message;
       return null;
+    }
+  }
+
+  // ⚠️ СОХРАНЕНИЕ ПРАВОК БЕЗ ОБРАЩЕНИЯ К МОДЕЛИ. Правка цитаты — это ручная
+  // работа, и платить за неё повторным разбором незачем
+  async function saveLibMaterial(slug) {
+    const lec = libraryLectures.find(l => l.slug === slug);
+    const statusEl = document.getElementById('lib-material-status-' + slug);
+    const исходные = window['_matbase_' + slug] || [];
+    const items = collectMaterial(slug, исходные);
+    if (!items.length) { statusEl.textContent = 'Нечего сохранять: все находки удалены.'; return; }
+
+    statusEl.textContent = 'Проверяю цитаты...';
+    // ⚠️ Привязку ПЕРЕСЧИТЫВАЕМ: ты мог поправить цитату, и старая отметка
+    // «проверено» стала бы враньём о новом тексте
+    const речь = transcriptForModel(lec.transcript);
+    for (const it of items) it.anchor_status = anchorStatusFor(речь, it);
+
+    try {
+      const прежний = window['_material_' + slug];
+      // ⚠️ СТАРЫЙ РАЗБОР (голый массив) НЕ ЗНАЕТ О СВОЕЙ ПОЛНОТЕ. Раньше при
+      // правке ему проставлялось `complete: true` — то есть неизвестное
+      // выдавалось за подтверждённое, а `chunks`/`failed_chunks` вовсе
+      // отсутствовали, и завод такой файл отклонял.
+      //
+      // Теперь ключи есть всегда, а неизвестное честно равно null. Правка
+      // руками не делает неполный разбор полным и не выдумывает, сколько
+      // частей было
+      const былОбъект = прежний && !Array.isArray(прежний);
+      const payload = {
+        schema: MATERIAL_SCHEMA,
+        created_at: былОбъект && прежний.created_at ? прежний.created_at : new Date().toISOString(),
+        analyzer: analyzerVersion(),
+        lecture_slug: slug,
+        transcript_fingerprint: await transcriptFingerprint(lec.transcript),
+        complete: былОбъект ? !!прежний.complete : null,
+        chunks: былОбъект && typeof прежний.chunks === 'number' ? прежний.chunks : null,
+        failed_chunks: былОбъект && typeof прежний.failed_chunks === 'number' ? прежний.failed_chunks : null,
+        // Откуда взялся разбор до правки: 1 — старый массив без метаданных
+        source_schema: былОбъект ? (прежний.schema || 2) : 1,
+        edited_at: new Date().toISOString(),
+        items,
+      };
+      const url = await uploadFactoryBlob(`material/${slug}`, payload);
+      const transcript = withMarker(lec.transcript, 'MATERIAL_URL', url);
+      const r = await fetch(`${API_URL}/lectures/${slug}?x_admin_token=${encodeURIComponent(ADMIN_TOKEN)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      syncTranscriptEverywhere(slug, transcript);
+      window['_material_' + slug] = payload;
+      renderMaterialList(slug, items);
+      const проверено = items.filter(i => i.anchor_status === 'verified').length;
+      statusEl.textContent = `Сохранено: ${items.length} находок, привязка проверена у ${проверено}.`;
+    } catch (e) {
+      statusEl.textContent = 'Не сохранилось: ' + e.message + ' Прежний разбор не тронут.';
     }
   }
 
@@ -2213,9 +2393,9 @@ ${chunk}
       const payload = {
         schema: MATERIAL_SCHEMA,
         created_at: new Date().toISOString(),
-        analyzer: 'analyzer-v10',
+        analyzer: analyzerVersion(),
         lecture_slug: slug,
-        transcript_fingerprint: transcriptFingerprint(lec.transcript),
+        transcript_fingerprint: await transcriptFingerprint(lec.transcript),
         // ⚠️ Честный признак полноты: одна упавшая часть — это НЕ полный разбор
         complete: итог.failed === 0,
         chunks: итог.chunks,
@@ -2229,7 +2409,7 @@ ${chunk}
         body: JSON.stringify({ transcript }),
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      lec.transcript = transcript;
+      syncTranscriptEverywhere(slug, transcript);
       window['_material_' + slug] = payload;
       renderMaterialList(slug, items);
 
@@ -3540,6 +3720,7 @@ ${tcList}
           <div id="lib-material-list-${l.slug}" style="margin-top:10px"></div>
           <div style="display:flex;gap:8px;margin-top:10px">
             <button class="btn-primary" style="flex:1" id="lib-material-btn-${l.slug}" onclick="generateLibMaterial('${l.slug}')">${hasMaterial ? 'Пересобрать' : 'Разобрать для завода'}</button>
+            <button class="btn btn-sm" onclick="saveLibMaterial('${l.slug}')">Сохранить правки</button>
             <button class="btn btn-sm" onclick="downloadLibMaterial('${l.slug}')">Скачать JSON</button>
           </div>
         </div>
