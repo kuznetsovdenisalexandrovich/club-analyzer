@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v17 -->
+<!-- FILE_VERSION: analyzer-v18 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -3779,7 +3779,7 @@ ${tcList}
       </div>
       <div class="field">
         <label>Аудиоверсия (mp3) — питает подкаст-плеер в приложении</label>
-        <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-audio-${slug}" value="${(l.audio_url||'').replace(/"/g,'&quot;')}" placeholder="https://club-audio.s3.twcstorage.ru/audio/...">
+        <input type="text" class="btn" style="width:100%;text-align:left;cursor:text" id="lc-audio-${slug}" value="${(l.audio_url||'').replace(/"/g,'&quot;')}" placeholder="Ссылка на аудио из хранилища клуба">
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
           <input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav" id="lc-audiofile-${slug}" style="display:none"
                  onchange="handleAudioUpload('${slug}', this.files[0])">
