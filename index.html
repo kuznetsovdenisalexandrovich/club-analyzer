@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v18 -->
+<!-- FILE_VERSION: analyzer-v19 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -2840,6 +2840,24 @@ ${tcList}
   const ADMIN_TOKEN_KEY = 'analyzer_token';
   let ADMIN_TOKEN = '';
   try { ADMIN_TOKEN = sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; } catch(e) {}
+  // Catalogue reads now require the same authenticated admin session as writes.
+  (function(){
+    const raw = window.fetch.bind(window);
+    window.fetch = function(input, init){
+      if (typeof input === 'string' && ADMIN_TOKEN){
+        try {
+          const url = new URL(input, location.href);
+          if (url.origin === new URL(API_URL).origin && /^(\/lectures(?:\/|$)|\/streams\/[^/]+\/lectures$)/.test(url.pathname)){
+            const headers = new Headers(init && init.headers || {});
+            headers.set('X-Admin-Token', ADMIN_TOKEN);
+            init = {...init, headers};
+          }
+        } catch(e){}
+      }
+      return raw(input, init);
+    };
+  })();
+
 
   async function lectureExists(slug) {
     try {
@@ -6017,3 +6035,4 @@ ${list}
 </div>
 </body>
 </html>
+
