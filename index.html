@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v21 -->
+<!-- FILE_VERSION: analyzer-v22 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -407,6 +407,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 .dp-cell{position:relative}
 .dp-picked{outline:2px solid var(--lav,#9b8cf2)}
 .dp-today{text-decoration:underline}
+.editorial-columns{display:grid;grid-template-columns:1fr 1fr;gap:18px}.editorial-idea{border-top:1px solid var(--text-faint);padding:18px 0}.editorial-source{white-space:pre-wrap;line-height:1.6;font-size:14px;margin-top:10px}.editorial-text{width:100%;min-height:200px}#editorial-prompt{min-height:220px}#editorial-panel[hidden],#analyzer-settings[hidden]{display:none!important}@media(max-width:600px){.editorial-columns{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -414,7 +415,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 // Independent bootstrap: still works when the application script fails to start.
 (function () {
   'use strict';
-  const VERSION = 'analyzer-v21', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
+  const VERSION = 'analyzer-v22', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
   const session = Math.random().toString(36).slice(2, 10);
   let events = [], sequence = 0, run = 0, storageAvailable = true;
   const types = ['page_start','request_start','response_headers','request_error','body_error','runtime_error','unhandled_error','display_error','analysis_start','analysis_end','stage','storage_error','offline','online'];
@@ -544,6 +545,32 @@ function downloadAnalyzerDiagnostics() {
     </div>
     <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Тёмная тема">🌙</button>
   </header>
+
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+    <button class="btn btn-sm" onclick="openAnalyzerSettings()">Настройки анализатора</button>
+    <button class="btn btn-sm" onclick="listEditorialDrafts()">Мои черновики</button>
+    <button class="btn btn-sm" onclick="downloadRawTranscript()">Скачать расшифровку</button>
+  </div>
+  <section id="analyzer-settings" class="card" hidden>
+    <h3>Настройки анализатора</h3><p class="note">Модель и промпт редакторской выжимки. Расшифровка записи пока использует Whisper; первичная карточка — прежний обработчик. Ключи редакторской модели остаются на сервере.</p>
+    <label>Сервис<select id="editorial-provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option></select></label>
+    <label>Модель<input id="editorial-model" value="deepseek-flash" maxlength="100"></label>
+    <label>Лимит ответа в токенах<input id="editorial-max_tokens" type="number" min="1000" max="12000" value="6000"></label>
+    <label>Правила отбора и редактуры<textarea id="editorial-prompt"></textarea></label>
+    <p id="editorial-keys" class="note"></p><button class="btn btn-sm" onclick="resetAnalyzerPrompt()">Вернуть исходный промпт в поле</button> <button class="btn btn-sm" onclick="saveAnalyzerSettings()">Сохранить настройки</button><p id="analyzer-settings-status" class="note" role="status"></p>
+  </section>
+  <section id="editorial-panel" class="card" hidden>
+    <h3>Выжимка из слов автора</h3><p class="note">Каждая часть сохраняется на сервере. После закрытия вкладки обработка останавливается; продолжить можно из «Мои черновики». Существующая выжимка меняется только после вашей проверки.</p>
+    <p id="editorial-status" role="status"></p><div id="editorial-drafts"></div>
+    <button id="editorial-resume" class="btn btn-sm" onclick="editorialContinue(false)">Продолжить</button>
+    <button id="editorial-retry" class="btn btn-sm" onclick="editorialContinue(true)" hidden>Повторить неудавшуюся часть</button>
+    <button class="btn btn-sm" onclick="editorialPause()">Остановить после части</button>
+    <button class="btn btn-sm" onclick="exportEditorialDraft()">Скачать черновик с исходниками</button>
+    <button class="btn btn-sm" onclick="saveEditorialReview()">Сохранить правки черновика</button><div id="editorial-ideas"></div>
+    <label><input id="editorial-source-checked" type="checkbox"> Полноту расшифровки и выбранные цитаты проверил по записи</label>
+    <p><button id="editorial-approve" class="btn btn-sm" onclick="approveEditorialDraft()" disabled>Принять выбранные идеи</button> <button id="editorial-restore" class="btn btn-sm" onclick="restoreEditorialDraft()" hidden>Вернуть предыдущую выжимку</button></p>
+  </section>
 
   <div class="tabs" style="margin-bottom:20px">
     <div class="mode-tab tab active" onclick="switchMode('new')">Новое видео</div>
@@ -1365,6 +1392,7 @@ function downloadAnalyzerDiagnostics() {
         : transcript;
 
       currentTranscript = stamped;
+      if (editorialSourceRepeats(stamped)) throw new Error('В расшифровке массовые повторы. Она доступна для скачивания, но анализ остановлен: проверьте запись и распознавание.');
       setStage('s1','done','Файл получен');
       setStage('s2','done',`Транскрипт готов (${transcript.length} символов, ${segments.length} сегментов`
         + (currentWords.length ? `, ${currentWords.length} слов с таймингом)` : ', пословных отметок нет)'));
@@ -1376,11 +1404,10 @@ function downloadAnalyzerDiagnostics() {
       const link    = document.getElementById('link-input').value.trim();
       const linkVk  = document.getElementById('link-vk-input').value.trim();
 
-      const segSummary = segments
-        .map(s => `[${fmtTime(s.start)}] ${s.text.trim().slice(0, 60)}`)
-        .join('\n');
-      // (подсказка остаётся укороченной — в неё идут первые 60 знаков отрезка,
-      // тогда как в базу уезжает полный размеченный текст)
+      const segSummary = segments.length ? segments
+        .map(s => `[${fmtTime(s.start)}] ${(s.text || '').trim()}`)
+        .join('\n') : transcript;
+      // v22: полный источник, без обрезания каждого сегмента.
 
       const slugInstruction = slug
         ? `ОБЯЗАТЕЛЬНО используй именно этот slug, не придумывай свой: "${slug}"`
@@ -1416,7 +1443,7 @@ ${slugInstruction}
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
         body: JSON.stringify({
           model:'gpt-4o-mini',
-          max_tokens:1200,
+          max_tokens:6000,
           messages:[{role:'user',content:prompt}]
         })
       });
@@ -1427,6 +1454,7 @@ ${slugInstruction}
       }
 
       const gData = await gRes.json();
+      if (gData.choices?.[0]?.finish_reason !== 'stop') throw new Error('Ответ модели оборвался. Расшифровка сохранена в текущей вкладке — скачайте её; карточка не сформирована.');
       setStage('s3','done','Анализ завершён');
       setStage('s4','active','Формируем карточку...');
 
@@ -1483,6 +1511,7 @@ ${slugInstruction}
       }
       showResult(card, transcript, currentTimecodes);
       addToDict(); // сразу в словарь, с полным транскриптом — вручную жать не нужно
+      await editorialStartCurrent();
       window.AnalyzerDiagnostics.record('analysis_end',{outcome:'success'});
 
     } catch(err) {
@@ -1984,6 +2013,7 @@ ${tcList}
 
       if (r.ok) {
         const data = await r.json();
+        if (data.choices?.[0]?.finish_reason !== 'stop') throw new Error('Ответ модели оборван или отклонён. Результат не принимается как полный.');
         // Записываем ФАКТИЧЕСКИЙ расход, если сервер его сообщил — он точнее
         const факт = data.usage && data.usage.total_tokens;
         tpmWindow.push({ t: Date.now(), n: факт || нужно });
@@ -2811,23 +2841,7 @@ ${tcList}
       + (ушло + обновлено < list.length ? ` Не доехало: ${list.length - ушло - обновлено}.` : '');
   }
 
-  async function generateInsightsForCurrent() {
-    const key = document.getElementById('openai-key').value.trim();
-    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
-    if (!currentResult || !currentTranscript) { alert('Сначала проанализируй видео'); return; }
-    const statusEl = document.getElementById('current-insights-status');
-    statusEl.textContent = 'Генерирую...';
-    try {
-      const insights = await extractKeyInsights(key, currentTranscript, currentTimecodes, currentResult.title);
-      currentResult.key_insights = insights;
-      renderInsightsList('current-insights-list', insights, true);
-      addToDict(); // обновляем запись в словаре с новой выжимкой
-      statusEl.textContent = `Готово — ${insights.length} мыслей. Отредактируй при желании и сохрани через "Загрузить в базу".`;
-    } catch (e) {
-      statusEl.textContent = '';
-      alert(e.message);
-    }
-  }
+  async function generateInsightsForCurrent() { return editorialStartCurrent(); }
 
   function switchTab(name) {
     const names = ['card','timecodes','insights','transcript','json'];
@@ -3860,6 +3874,7 @@ ${tcList}
         <div class="card-title" style="justify-content:space-between;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
           <span style="font-size:13px;flex:1;min-width:140px">${l.title}</span>
           <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="editorialStart(${jsArg(l.slug)})">Новый разбор цитат</button>
             <button class="btn btn-sm" onclick="toggleLibCardEditor('${l.slug}')">Карточка</button>
             <button class="btn btn-sm" onclick="toggleLibInsightEditor('${l.slug}')">${hasInsights ? 'Выжимка' : 'Сгенерировать выжимку'}</button>
             <button class="btn btn-sm" onclick="toggleLibMaterial('${l.slug}')">${hasMaterial ? 'Материалы для завода ✓' : 'Материалы для завода'}</button>
@@ -4021,23 +4036,7 @@ ${tcList}
     }
   }
 
-  async function generateLibInsights(slug) {
-    const key = document.getElementById('lib-openai-key').value.trim();
-    if (!key) { alert('Впиши OpenAI API Key в карточке выше'); return; }
-    const lec = libraryLectures.find(l => l.slug === slug);
-    if (!lec || !lec.transcript) { alert('У этой лекции нет сохранённого транскрипта'); return; }
-    const statusEl = document.getElementById('lib-status-'+slug);
-    statusEl.textContent = 'Генерирую...';
-    try {
-      const insights = await extractKeyInsights(key, lec.transcript, lec.timecodes, lec.title);
-      lec.key_insights = insights;
-      renderInsightsList('lib-insights-'+slug, insights, true);
-      statusEl.textContent = `Готово — ${insights.length} мыслей. Проверь и сохрани.`;
-    } catch (e) {
-      statusEl.textContent = '';
-      alert(e.message);
-    }
-  }
+  async function generateLibInsights(slug) { return editorialStart(slug); }
 
   async function saveLibInsights(slug) {
     const insights = collectInsights('lib-insights-'+slug);
@@ -6175,6 +6174,107 @@ ${list}
     </div>
   </div>
 </div>
+<script>
+// v22: provider credentials stay on the server. Drafts survive tab closure.
+let editorialDraft = null, editorialBusy = false, editorialStop = false, editorialSettings = null;
+function editorialSourceRepeats(text) {const w=String(text).toLowerCase().match(/[\p{L}\p{N}_]+/gu)||[];if(w.length<30)return false;const c=new Map();let max=0;for(let i=0;i<w.length-3;i++){const k=w.slice(i,i+4).join(' ');const n=(c.get(k)||0)+1;c.set(k,n);max=Math.max(max,n);}return max>=10&&max/(w.length-3)>.05;}
+function editorialEscape(v) { return String(v == null ? '' : v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function editorialApi(path, method='GET', body) {
+  if (!ADMIN_TOKEN) throw new Error('Сначала войдите по PIN');
+  const r = await analyzerRequest(API_URL+'/analyzer'+path,{method,headers:{'Content-Type':'application/json','X-Admin-Token':ADMIN_TOKEN},...(body===undefined?{}:{body:JSON.stringify(body)})},145000);
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(r.status===404?'Серверный модуль анализатора ещё не доступен':typeof data.detail==='string'?data.detail:'Ошибка сервера '+r.status);
+  return data;
+}
+function editorialMessage(text) { document.getElementById('editorial-status').textContent=text; }
+async function openAnalyzerSettings() {
+  const panel=document.getElementById('analyzer-settings');panel.hidden=!panel.hidden;if(panel.hidden)return;
+  const status=document.getElementById('analyzer-settings-status');status.textContent='Загружаю настройки…';
+  try { editorialSettings=await editorialApi('/settings');fillAnalyzerSettings(editorialSettings);status.textContent='Настройки применяются к новым черновикам. У начатого разбора остаются его модель и промпт.'; }
+  catch(e){status.textContent=e.message;}
+}
+function fillAnalyzerSettings(s) {
+  for(const k of ['provider','model','prompt','max_tokens'])document.getElementById('editorial-'+k).value=s[k];
+  document.getElementById('editorial-keys').textContent=s.available?Object.entries(s.available).map(([k,v])=>k+': '+(v?'ключ настроен':'ключ отсутствует')).join(' · '):'';
+}
+async function saveAnalyzerSettings() {
+  const status=document.getElementById('analyzer-settings-status');status.textContent='Сохраняю…';
+  try {const body={};for(const k of ['provider','model','prompt'])body[k]=document.getElementById('editorial-'+k).value;body.max_tokens=Number(document.getElementById('editorial-max_tokens').value);editorialSettings=await editorialApi('/settings','PUT',body);status.textContent='Сохранено. Предыдущая настройка сохранена на сервере.';}
+  catch(e){status.textContent=e.message;}
+}
+function resetAnalyzerPrompt() { if(editorialSettings)document.getElementById('editorial-prompt').value=editorialSettings.defaults.prompt; }
+function downloadRawTranscript() { if(!currentTranscript){alert('Расшифровки пока нет');return;}download(currentTranscript,'lecture-transcript.txt','text/plain'); }
+async function editorialStartCurrent() {
+  const slug=(currentResult&&currentResult.slug)||document.getElementById('slug-input').value.trim();
+  if(!slug||!currentTranscript){alert('Нужны slug и расшифровка. Уже полученный текст можно скачать отдельно.');return;}
+  return editorialStart(slug,currentTranscript);
+}
+async function editorialStart(slug,transcript) {
+  if(editorialBusy)return;
+  document.getElementById('editorial-panel').hidden=false;editorialMessage('Создаю черновик…');
+  try {editorialDraft=await editorialApi('/drafts','POST',{slug,...(transcript===undefined?{}:{transcript})});editorialRender();await editorialContinue(false);}
+  catch(e){editorialMessage(e.message);}
+}
+function editorialPause(){editorialStop=true;editorialMessage('Остановлюсь после текущей части. Уже сохранённое останется на сервере.');}
+async function editorialContinue(retry=false) {
+  if(editorialBusy||!editorialDraft)return;
+  if(retry&&!confirm('Повторить неудавшуюся часть? Если ответ потерялся в сети, сервис может повторно списать стоимость запроса.'))return;
+  editorialBusy=true;editorialStop=false;
+  try {
+    while(!editorialStop&&!['ready','approved','restored'].includes(editorialDraft.state)){
+      editorialMessage('Обработано частей: '+editorialDraft.parts.filter(p=>p.status==='done').length+' / '+editorialDraft.parts.length+'. Можно остановить после текущей части.');
+      editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/next','POST',{retry});retry=false;editorialRender();
+      if(editorialDraft.state==='failed')break;
+    }
+  } catch(e){editorialMessage(e.message+' Откройте «Мои черновики», чтобы проверить сохранённое состояние перед повтором.');}
+  finally{editorialBusy=false;}
+}
+async function listEditorialDrafts() {
+  document.getElementById('editorial-panel').hidden=false;
+  try {const rows=await editorialApi('/drafts');const box=document.getElementById('editorial-drafts');box.replaceChildren();
+    for(const row of rows){const b=document.createElement('button');b.className='btn btn-sm';b.style.margin='4px';b.textContent=row.slug+' · '+row.state+' · '+row.created_at;b.addEventListener('click',()=>loadEditorialDraft(row.id));box.appendChild(b);}
+    if(!rows.length)box.textContent='Черновиков пока нет';
+  }catch(e){editorialMessage(e.message);}
+}
+async function loadEditorialDraft(id) {
+  if(editorialBusy){editorialMessage('Сначала остановите текущий разбор');return;}
+  try{editorialDraft=await editorialApi('/drafts/'+encodeURIComponent(id));editorialRender();}catch(e){editorialMessage(e.message);}
+}
+function editorialRender() {
+  const d=editorialDraft;if(!d)return;
+  document.getElementById('editorial-panel').hidden=false;
+  editorialMessage(d.slug+' · '+d.provider+' / '+d.model+' · '+d.parts.filter(p=>p.status==='done').length+'/'+d.parts.length+' частей · '+d.state+(d.last_error?' · '+d.last_error:''));
+  document.getElementById('editorial-resume').hidden=!['draft','running'].includes(d.state);
+  document.getElementById('editorial-retry').hidden=d.state!=='failed';
+  document.getElementById('editorial-approve').disabled=d.state!=='ready';
+  document.getElementById('editorial-restore').hidden=d.state!=='approved';
+  document.getElementById('editorial-source-checked').checked=!!d.source_checked;
+  const box=document.getElementById('editorial-ideas');box.replaceChildren();
+  const labels={needs_context:'Не хватает контекста',needs_audio:'Сверить с аудио',speaker_uncertain:'Проверить, кто говорит',substantial_edit:'Значительная правка',qualification_changed:'Могли измениться оговорки',no_timecode:'Нет таймкода'};
+  for(const i of d.approved_ideas||d.ideas){
+    const row=document.createElement('div');row.className='editorial-idea';row.dataset.ideaId=i.id;
+    row.innerHTML='<h4>'+editorialEscape(i.title)+'</h4><div class="note">'+editorialEscape(i.timecode||'Время неизвестно')+' · '+editorialEscape(i.flags.map(x=>labels[x]||x).join('; '))+'</div><div class="editorial-columns"><div><b>Исходник</b><p class="editorial-source"></p></div><label><b>Лёгкая редактура</b><textarea class="editorial-text" rows="9"></textarea></label></div><label><input type="checkbox" class="editorial-reviewed"> Проверил текст и источник — включить в выжимку</label>';
+    row.querySelector('.editorial-source').textContent=i.source;row.querySelector('textarea').value=i.edited;row.querySelector('.editorial-reviewed').checked=!!i.reviewed;box.appendChild(row);
+  }
+}
+function editorialEdits() {return Array.from(document.querySelectorAll('.editorial-idea')).filter(r=>r.querySelector('.editorial-reviewed').checked).map(r=>({id:r.dataset.ideaId,edited:r.querySelector('textarea').value,reviewed:true}));}
+async function approveEditorialDraft() {
+  if(!editorialDraft||editorialBusy)return;
+  const ideas=editorialEdits(),checked=document.getElementById('editorial-source-checked').checked;
+  if(!ideas.length||!checked){editorialMessage('Отметьте проверенные идеи и подтвердите полноту источника.');return;}
+  if(!confirm('Заменить выжимку этого занятия выбранными идеями? Прежний вариант сохранится для отката.'))return;
+  try{editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/approve','POST',{ideas,source_checked:checked});editorialRender();await loadLibraryFromDB();}
+  catch(e){editorialMessage(e.message);}
+}
+async function restoreEditorialDraft() {
+  if(!editorialDraft||!confirm('Вернуть предыдущую выжимку этого занятия?'))return;
+  try{editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/restore','POST',{confirm:true});editorialRender();await loadLibraryFromDB();}catch(e){editorialMessage(e.message);}
+}
+async function exportEditorialDraft() {if(!editorialDraft)return;try{const d=await editorialApi('/drafts/'+editorialDraft.id+'/export');download(JSON.stringify({...d,local_review:editorialAllEdits()},null,2),'editorial-'+d.id+'.json','application/json');}catch(e){editorialMessage(e.message);}}
+function editorialAllEdits(){return Array.from(document.querySelectorAll('.editorial-idea')).map(r=>({id:r.dataset.ideaId,edited:r.querySelector('textarea').value,reviewed:r.querySelector('.editorial-reviewed').checked}));}
+async function saveEditorialReview(){if(!editorialDraft)return;try{editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/review','POST',{ideas:editorialAllEdits(),source_checked:document.getElementById('editorial-source-checked').checked});editorialMessage('Правки сохранены в черновике. Выжимка в приложении не изменена.');}catch(e){editorialMessage(e.message);}}
+
+</script>
 </body>
 </html>
 
