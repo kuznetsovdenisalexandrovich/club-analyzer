@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v22 -->
+<!-- FILE_VERSION: analyzer-v23 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -415,7 +415,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 // Independent bootstrap: still works when the application script fails to start.
 (function () {
   'use strict';
-  const VERSION = 'analyzer-v22', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
+  const VERSION = 'analyzer-v23', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
   const session = Math.random().toString(36).slice(2, 10);
   let events = [], sequence = 0, run = 0, storageAvailable = true;
   const types = ['page_start','request_start','response_headers','request_error','body_error','runtime_error','unhandled_error','display_error','analysis_start','analysis_end','stage','storage_error','offline','online'];
@@ -6222,7 +6222,7 @@ async function editorialContinue(retry=false) {
   editorialBusy=true;editorialStop=false;
   try {
     while(!editorialStop&&!['ready','approved','restored'].includes(editorialDraft.state)){
-      editorialMessage('Обработано частей: '+editorialDraft.parts.filter(p=>p.status==='done').length+' / '+editorialDraft.parts.length+'. Можно остановить после текущей части.');
+      editorialMessage('Обработано частей: '+editorialDraft.parts.filter(p=>p.status==='done').length+' / '+editorialDraft.parts.length+'. Проверено цитат: '+(editorialDraft.review_parts||[]).filter(p=>p.status==='done').length+' / '+(editorialDraft.review_parts||[]).length+'. Можно остановить после текущей части.');
       editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/next','POST',{retry});retry=false;editorialRender();
       if(editorialDraft.state==='failed')break;
     }
@@ -6243,17 +6243,17 @@ async function loadEditorialDraft(id) {
 function editorialRender() {
   const d=editorialDraft;if(!d)return;
   document.getElementById('editorial-panel').hidden=false;
-  editorialMessage(d.slug+' · '+d.provider+' / '+d.model+' · '+d.parts.filter(p=>p.status==='done').length+'/'+d.parts.length+' частей · '+d.state+(d.last_error?' · '+d.last_error:''));
+  editorialMessage(d.slug+' · '+d.provider+' / '+d.model+' · '+d.parts.filter(p=>p.status==='done').length+'/'+d.parts.length+' частей · проверено цитат: '+(d.review_parts||[]).filter(p=>p.status==='done').length+'/'+(d.review_parts||[]).length+' · '+d.state+(d.last_error?' · '+d.last_error:''));
   document.getElementById('editorial-resume').hidden=!['draft','running'].includes(d.state);
   document.getElementById('editorial-retry').hidden=d.state!=='failed';
   document.getElementById('editorial-approve').disabled=d.state!=='ready';
   document.getElementById('editorial-restore').hidden=d.state!=='approved';
   document.getElementById('editorial-source-checked').checked=!!d.source_checked;
   const box=document.getElementById('editorial-ideas');box.replaceChildren();
-  const labels={needs_context:'Не хватает контекста',needs_audio:'Сверить с аудио',speaker_uncertain:'Проверить, кто говорит',substantial_edit:'Значительная правка',qualification_changed:'Могли измениться оговорки',no_timecode:'Нет таймкода'};
+  const labels={needs_context:'Не хватает контекста',needs_audio:'Сверить с аудио',speaker_uncertain:'Проверить, кто говорит',substantial_edit:'Значительная правка',qualification_changed:'Могли измениться оговорки',no_timecode:'Нет таймкода',incomplete_idea:'Мысль не закончена',quality_review_stale:'Текст изменён после проверки'};
   for(const i of d.approved_ideas||d.ideas){
     const row=document.createElement('div');row.className='editorial-idea';row.dataset.ideaId=i.id;
-    row.innerHTML='<h4>'+editorialEscape(i.title)+'</h4><div class="note">'+editorialEscape(i.timecode||'Время неизвестно')+' · '+editorialEscape(i.flags.map(x=>labels[x]||x).join('; '))+'</div><div class="editorial-columns"><div><b>Исходник</b><p class="editorial-source"></p></div><label><b>Лёгкая редактура</b><textarea class="editorial-text" rows="9"></textarea></label></div><label><input type="checkbox" class="editorial-reviewed"> Проверил текст и источник — включить в выжимку</label>';
+    row.innerHTML='<h4>'+editorialEscape(i.title)+'</h4><div class="note">'+editorialEscape(i.timecode||'Время неизвестно')+' · '+editorialEscape(i.flags.map(x=>labels[x]||x).join('; ')+(i.quality_review?' · '+i.quality_review.reason:''))+'</div><div class="editorial-columns"><div><b>Исходник</b><p class="editorial-source"></p></div><label><b>Лёгкая редактура</b><textarea class="editorial-text" rows="9"></textarea></label></div><label><input type="checkbox" class="editorial-reviewed"> Проверил текст и источник — включить в выжимку</label>';
     row.querySelector('.editorial-source').textContent=i.source;row.querySelector('textarea').value=i.edited;row.querySelector('.editorial-reviewed').checked=!!i.reviewed;box.appendChild(row);
   }
 }
