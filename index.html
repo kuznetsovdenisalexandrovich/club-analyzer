@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v20 -->
+<!-- FILE_VERSION: analyzer-v21 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -410,6 +410,91 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 </style>
 </head>
 <body>
+<script>
+// Independent bootstrap: still works when the application script fails to start.
+(function () {
+  'use strict';
+  const VERSION = 'analyzer-v21', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
+  const session = Math.random().toString(36).slice(2, 10);
+  let events = [], sequence = 0, run = 0, storageAvailable = true;
+  const types = ['page_start','request_start','response_headers','request_error','body_error','runtime_error','unhandled_error','display_error','analysis_start','analysis_end','stage','storage_error','offline','online'];
+  const fields = {type:/^[a-z_]{1,32}$/,session:/^[a-z0-9]{1,16}$/,version:/^analyzer-v\d{1,4}$/,endpoint:/^(openai\/(transcription|completion|other)|backend\/(login|key|lectures|streams|blob|upload|schedule|digest|other)|external)$/,method:/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|OTHER)$/,kind:/^(AbortError|TypeError|ReferenceError|SyntaxError|RangeError|QuotaExceededError|SecurityError|Error|unknown)$/,stage:/^s[1-4]$/,state:/^(pending|active|done|error)$/,format:/^(mp3|mp4|m4a|wav|ogg|webm|mpeg|mpga|other)$/,outcome:/^(success|error)$/};
+  function clean(row) {
+    const out = {};
+    for (const [k,rx] of Object.entries(fields)) if (typeof row[k] === 'string' && rx.test(row[k])) out[k] = row[k];
+    for (const k of ['time','request','run','status','ms','line','column','bytes']) if (Number.isFinite(row[k]) && row[k] >= 0 && row[k] < 1e15) out[k] = Math.round(row[k]);
+    return out;
+  }
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(KEY) || '[]');
+    if (Array.isArray(saved)) events = saved.map(clean).filter(e => types.includes(e.type) && e.time > Date.now()-86400000).slice(-LIMIT);
+  } catch (_) { storageAvailable = false; }
+  function render() {
+    const errors = events.filter(e => /error$/.test(e.type) || (e.type === 'response_headers' && e.status >= 400)).length;
+    document.querySelectorAll('[data-diagnostic-status]').forEach(el => { el.textContent = VERSION + ' · код ' + session + ' · ' + (errors ? 'событий с ошибками: ' + errors : 'журнал включён'); });
+  }
+  function record(type, data = {}) {
+    try {
+      if (!types.includes(type)) return;
+      events.push(clean({...data,type,time:Date.now(),session,version:VERSION,run:data.run === undefined ? run : data.run}));
+      events = events.slice(-LIMIT);
+      try { sessionStorage.setItem(KEY,JSON.stringify(events)); } catch (_) { storageAvailable = false; }
+      render();
+    } catch (_) { /* Diagnostics must never interrupt the application. */ }
+  }
+  function kind(err) { return err && fields.kind.test(err.name) ? err.name : 'unknown'; }
+  function endpoint(input) {
+    try {
+      const u = new URL(typeof input === 'string' ? input : input.url,location.href), p = u.pathname;
+      if (u.origin === 'https://api.openai.com') return 'openai/' + (p === '/v1/audio/transcriptions' ? 'transcription' : p === '/v1/chat/completions' ? 'completion' : 'other');
+      if (u.origin === 'https://api.youselllikeagod-magazine.ru') {
+        const routes = [['login',/^\/admin\/login$/],['key',/^\/admin\/service-key$/],['blob',/^\/factory\/(pub\/)?blob$/],['upload',/^\/admin\/(audio-upload-url|upload-stream-cover)$/],['lectures',/^\/lectures(?:\/|$)/],['streams',/^\/streams(?:\/|$)/],['schedule',/^\/schedule(?:\/|$)/],['digest',/^\/(admin\/digest|digests)(?:\/|$)/]];
+        return 'backend/' + ((routes.find(r=>r[1].test(p)) || ['other'])[0]);
+      }
+    } catch (_) {}
+    return 'external';
+  }
+  const rawFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    const request = ++sequence, started = performance.now();
+    const methodValue = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    const data = {request,run,endpoint:endpoint(input),method:fields.method.test(methodValue)?methodValue:'OTHER'};
+    record('request_start',data);
+    // No request bodies, headers, raw URLs, responses or exception messages are recorded.
+    return Promise.resolve().then(()=>rawFetch(input,init)).then(response=>{
+      record('response_headers',{...data,status:response.status,ms:performance.now()-started});
+      return response;
+    },err=>{
+      record('request_error',{...data,kind:kind(err),ms:performance.now()-started});
+      throw err;
+    });
+  };
+  window.addEventListener('error',e=>record('runtime_error',{kind:kind(e.error),line:e.lineno,column:e.colno}));
+  window.addEventListener('unhandledrejection',e=>record('unhandled_error',{kind:kind(e.reason)}));
+  window.addEventListener('offline',()=>record('offline'));
+  window.addEventListener('online',()=>record('online'));
+  document.addEventListener('DOMContentLoaded',render);
+  window.AnalyzerDiagnostics = {
+    record,
+    bodyError(url,err) { record('body_error',{endpoint:endpoint(url),kind:kind(err)}); },
+    start(file) { run++; const ext = String(file && file.name || '').split('.').pop().toLowerCase(); record('analysis_start',{bytes:file && file.size,format:fields.format.test(ext)?ext:'other'}); },
+    report() {
+      const ua = navigator.userAgent;
+      const browser = /Firefox\/(\d+)/.exec(ua) || /Edg\/(\d+)/.exec(ua) || /Chrome\/(\d+)/.exec(ua) || /Version\/(\d+).*Safari/.exec(ua);
+      return {schema:1,version:VERSION,session,exported_at:new Date().toISOString(),browser:browser ? {family:browser[0].startsWith('Version/')?'Safari':browser[0].split('/')[0],major:Number(browser[1])}: {family:'other'},online:navigator.onLine,viewport:{width:innerWidth,height:innerHeight},storage_available:storageAvailable,retention:'Last 200 events, at most 24 hours, within this browser tab',events:events.map(clean)};
+    }
+  };
+  record('page_start');
+})();
+function downloadAnalyzerDiagnostics() {
+  const report = window.AnalyzerDiagnostics.report();
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
+  const a = document.createElement('a');a.href=url;a.download='analyzer-report-'+report.session+'.json';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+</script>
+
 <div class="pin-screen" id="pin-screen">
   <div class="pin-logo">БП</div>
   <div class="pin-title">Введите пин-код</div>
@@ -421,6 +506,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     <div class="pin-dot" id="d4"></div>
   </div>
   <div class="pin-error" id="pin-error"></div>
+  <button class="btn btn-sm" onclick="downloadAnalyzerDiagnostics()">Скачать диагностический отчёт</button>
   <div class="pin-pad">
     <button class="pin-btn" onclick="pinKey('1')">1</button>
     <button class="pin-btn" onclick="pinKey('2')">2</button>
@@ -442,6 +528,11 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 <div class="blob blob-3"></div>
 
 <div class="shell">
+  <details class="card" style="margin-top:16px">
+    <summary style="cursor:pointer">Диагностика · <span data-diagnostic-status>журнал включён</span></summary>
+    <p class="note" style="margin:12px 0">Если анализ остановился, скачайте отчёт и передайте его администратору. В нём — этапы, время и коды ошибок, без ключей, имени файла, записи и текста лекции. Журнал остаётся в этой вкладке, переживает обновление страницы и никуда автоматически не отправляется.</p>
+    <button class="btn btn-sm" onclick="downloadAnalyzerDiagnostics()">Скачать отчёт об ошибке</button>
+  </details>
 
   <header>
     <div class="brand">
@@ -1071,6 +1162,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     dictionary = savedDictionary;
   } catch (err) {
     dictionaryReadable = false;
+    window.AnalyzerDiagnostics.record('storage_error',{kind:err.name});
     // Не удаляем повреждённые данные: их можно восстановить отдельно.
     setTimeout(() => showError('Не удалось прочитать словарь на этом компьютере. Анализатор доступен; перед сохранением новых результатов экспортируйте старые данные или обратитесь к администратору.'), 0);
   }
@@ -1080,6 +1172,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       if (!dictionaryReadable) throw new Error('Старый словарь не прочитан');
       localStorage.setItem('club_dict', JSON.stringify(dictionary));
     } catch (err) {
+      window.AnalyzerDiagnostics.record('storage_error',{kind:err.name});
       showError('Разбор готов, но словарь не сохранён на этом компьютере. Скачайте JSON с транскриптом, чтобы не потерять результат.');
     }
   }
@@ -1099,6 +1192,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       const body = await response.text();
       return new Response(body, {status: response.status, statusText: response.statusText, headers: response.headers});
     } catch (err) {
+      window.AnalyzerDiagnostics.bodyError(url,err);
       if (err.name === 'AbortError') throw new Error('Время ожидания ответа истекло. Автоматического повтора нет: проверьте соединение и повторите запуск вручную.');
       if (err instanceof TypeError) throw new Error('Браузер не получил ответ от ' + new URL(url).hostname + '. Проверьте доступность сервиса с этого компьютера и настройки сети. Это не подтверждение неверного ключа.');
       throw err;
@@ -1192,6 +1286,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   }
 
   function setStage(id, state, text) {
+    window.AnalyzerDiagnostics.record('stage', {stage:id,state});
     const el = document.getElementById(id);
     el.className = 'stage ' + state;
     const icons = { pending:'·', active:'<span class="spinner"></span>', done:'✓', error:'✕' };
@@ -1203,7 +1298,8 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     const key  = document.getElementById('openai-key').value.trim();
     const file = fileInput.files[0];
     if (!key || !file) return;
-    if (recordingError(file)) { showError(recordingError(file)); return; }
+    window.AnalyzerDiagnostics.start(file);
+    if (recordingError(file)) { showError(recordingError(file)); window.AnalyzerDiagnostics.record('analysis_end',{outcome:'error'}); return; }
 
     showError('');
     document.getElementById('progress-wrap').classList.add('visible');
@@ -1387,8 +1483,10 @@ ${slugInstruction}
       }
       showResult(card, transcript, currentTimecodes);
       addToDict(); // сразу в словарь, с полным транскриптом — вручную жать не нужно
+      window.AnalyzerDiagnostics.record('analysis_end',{outcome:'success'});
 
     } catch(err) {
+      window.AnalyzerDiagnostics.record('analysis_end',{outcome:'error'});
       showError(err.message);
       ['s1','s2','s3','s4'].forEach(s => {
         if (document.getElementById(s).classList.contains('active'))
@@ -4075,6 +4173,7 @@ ${tcList}
   }
 
   function showError(msg) {
+    if (msg) window.AnalyzerDiagnostics.record('display_error');
     const el=document.getElementById('error-box');
     el.textContent=msg;
     el.classList.toggle('visible',!!msg);
