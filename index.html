@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v19 -->
+<!-- FILE_VERSION: analyzer-v20 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -1063,7 +1063,47 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   // Нужны субтитрам, поэтому выгружаются отдельным файлом
   let currentWords = [];
   let currentTimecodes = [];
-  let dictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
+  let dictionary = [];
+  let dictionaryReadable = true;
+  try {
+    const savedDictionary = JSON.parse(localStorage.getItem('club_dict') || '[]');
+    if (!Array.isArray(savedDictionary)) throw new Error('Неверный формат словаря');
+    dictionary = savedDictionary;
+  } catch (err) {
+    dictionaryReadable = false;
+    // Не удаляем повреждённые данные: их можно восстановить отдельно.
+    setTimeout(() => showError('Не удалось прочитать словарь на этом компьютере. Анализатор доступен; перед сохранением новых результатов экспортируйте старые данные или обратитесь к администратору.'), 0);
+  }
+
+  function persistDictionary() {
+    try {
+      if (!dictionaryReadable) throw new Error('Старый словарь не прочитан');
+      localStorage.setItem('club_dict', JSON.stringify(dictionary));
+    } catch (err) {
+      showError('Разбор готов, но словарь не сохранён на этом компьютере. Скачайте JSON с транскриптом, чтобы не потерять результат.');
+    }
+  }
+
+  function recordingError(file) {
+    if (!file) return '';
+    if (file.size > 25 * 1000 * 1000) return 'Файл больше 25 МБ (' + formatSize(file.size) + '). Подготовьте сжатую аудиодорожку и выберите её вместо видео.';
+    if (!file.size) return 'Файл пустой — выберите запись ещё раз.';
+    return '';
+  }
+
+  async function analyzerRequest(url, options = {}, timeoutMs = 600000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {...options, signal: controller.signal});
+      const body = await response.text();
+      return new Response(body, {status: response.status, statusText: response.statusText, headers: response.headers});
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('Время ожидания ответа истекло. Автоматического повтора нет: проверьте соединение и повторите запуск вручную.');
+      if (err instanceof TypeError) throw new Error('Браузер не получил ответ от ' + new URL(url).hostname + '. Проверьте доступность сервиса с этого компьютера и настройки сети. Это не подтверждение неверного ключа.');
+      throw err;
+    } finally { clearTimeout(timer); }
+  }
 
   // env(safe-area-inset-top) сам по себе не всегда срабатывает внутри Telegram —
   // тот же фикс, что и в club-app: JS переопределяет --safe-top на реальное значение,
@@ -1132,14 +1172,15 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
   function checkReady() {
     const естьКлюч = !!document.getElementById('openai-key').value.trim();
     const естьФайл = !!(fileInput.files && fileInput.files[0]);
-    document.getElementById('run-btn').disabled = !(естьКлюч && естьФайл);
+    const fileError = recordingError(fileInput.files && fileInput.files[0]);
+    document.getElementById('run-btn').disabled = !(естьКлюч && естьФайл) || !!fileError;
     // ⚠️ Серая кнопка без объяснения — это загадка. Пишем прямо, чего не хватает
     const подпись = document.getElementById('run-hint');
     if (подпись) {
-      подпись.textContent = (естьКлюч && естьФайл) ? ''
+      подпись.textContent = fileError || ((естьКлюч && естьФайл) ? ''
         : !естьКлюч && !естьФайл ? 'Нужны ключ OpenAI и файл'
         : !естьКлюч ? 'Не хватает ключа OpenAI'
-        : 'Не выбран файл';
+        : 'Не выбран файл');
     }
   }
 
@@ -1162,6 +1203,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
     const key  = document.getElementById('openai-key').value.trim();
     const file = fileInput.files[0];
     if (!key || !file) return;
+    if (recordingError(file)) { showError(recordingError(file)); return; }
 
     showError('');
     document.getElementById('progress-wrap').classList.add('visible');
@@ -1185,7 +1227,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
       // просто потерей
       fd.append('timestamp_granularities[]','word');
 
-      const wRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const wRes = await analyzerRequest('https://api.openai.com/v1/audio/transcriptions', {
         method:'POST',
         headers:{'Authorization':`Bearer ${key}`},
         body:fd
@@ -1273,7 +1315,7 @@ ${slugInstruction}
 
 Таймкоды: выдели 8-15 смысловых разделов, охватывающих всё видео от начала до конца. Время бери из меток [MM:SS] или [H:MM:SS] в тексте. Последний таймкод должен быть близко к концу видео. Формат времени: M:SS или H:MM:SS.`;
 
-      const gRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      const gRes = await analyzerRequest('https://api.openai.com/v1/chat/completions', {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
         body: JSON.stringify({
@@ -1459,7 +1501,7 @@ ${slugInstruction}
       dictionary[idx]._transcript = transcript;
       dictionary[idx].transcript = transcript;
       // Словарь живёт в localStorage — без записи правка исчезнет при обновлении
-      localStorage.setItem('club_dict', JSON.stringify(dictionary));
+      persistDictionary();
     }
     const lec = (typeof libraryLectures !== 'undefined' && libraryLectures)
       ? libraryLectures.find(l => l.slug === slug) : null;
@@ -1832,7 +1874,7 @@ ${tcList}
     await tpmWait(нужно, opts.onWait);
 
     for (let попытка = 0; попытка < 3; попытка++) {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      const r = await analyzerRequest('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify({
@@ -2791,7 +2833,7 @@ ${tcList}
     delete entry._transcript;
     const idx = dictionary.findIndex(d=>d.slug===entry.slug);
     if (idx>=0) dictionary[idx]=entry; else dictionary.push(entry);
-    localStorage.setItem('club_dict', JSON.stringify(dictionary));
+    persistDictionary();
     renderDict();
   }
 
@@ -2951,6 +2993,7 @@ ${tcList}
     if (!confirm('Очистить весь словарь?')) return;
     dictionary=[];
     localStorage.removeItem('club_dict');
+    dictionaryReadable = true;
     renderDict();
   }
 
