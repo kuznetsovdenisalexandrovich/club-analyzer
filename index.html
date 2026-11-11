@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v25 -->
+<!-- FILE_VERSION: analyzer-v26 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -415,7 +415,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 // Independent bootstrap: still works when the application script fails to start.
 (function () {
   'use strict';
-  const VERSION = 'analyzer-v25', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
+  const VERSION = 'analyzer-v26', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
   const session = Math.random().toString(36).slice(2, 10);
   let events = [], sequence = 0, run = 0, storageAvailable = true;
   const types = ['page_start','request_start','response_headers','request_error','body_error','runtime_error','unhandled_error','display_error','analysis_start','analysis_end','stage','storage_error','offline','online'];
@@ -6276,6 +6276,6 @@ function editorialAllEdits(){return Array.from(document.querySelectorAll('.edito
 async function saveEditorialReview(){if(!editorialDraft)return;try{editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/review','POST',{ideas:editorialAllEdits(),source_checked:document.getElementById('editorial-source-checked').checked});editorialMessage('Правки сохранены в черновике. Выжимка в приложении не изменена.');}catch(e){editorialMessage(e.message);}}
 
 </script>
-<script src="quiz-editor.js?v=2"></script><script>QuizEditor.init({base:()=>API_URL,token:()=>ADMIN_TOKEN});</script></body>
+<script src="quiz-editor.js?v=3"></script><script>QuizEditor.init({base:()=>API_URL,token:()=>ADMIN_TOKEN});</script></body>
 </html>
 
