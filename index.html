@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- FILE_VERSION: analyzer-v23 -->
+<!-- FILE_VERSION: analyzer-v24 -->
 <html lang="ru" data-theme="light">
 <head>
 <meta charset="UTF-8">
@@ -415,7 +415,7 @@ input:focus,select:focus,textarea:focus,.rich-input:focus,.popup-input:focus{
 // Independent bootstrap: still works when the application script fails to start.
 (function () {
   'use strict';
-  const VERSION = 'analyzer-v23', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
+  const VERSION = 'analyzer-v24', KEY = 'analyzer_diagnostics_v1', LIMIT = 200;
   const session = Math.random().toString(36).slice(2, 10);
   let events = [], sequence = 0, run = 0, storageAvailable = true;
   const types = ['page_start','request_start','response_headers','request_error','body_error','runtime_error','unhandled_error','display_error','analysis_start','analysis_end','stage','storage_error','offline','online'];
@@ -611,7 +611,7 @@ function downloadAnalyzerDiagnostics() {
   <!-- File -->
   <div class="card">
     <div class="card-title"><span class="step-num">2</span> Файл с записью</div>
-    <div class="upload-zone" id="drop-zone">
+    <label style="display:block;margin:18px 0"><input type="checkbox" id="make-knowledge-quiz"> После анализа подготовить квиз для редактуры</label><button class="btn btn-sm" onclick="QuizEditor.open()" type="button">Редактор квизов</button><div class="upload-zone" id="drop-zone">
       <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.ogg,.webm" />
       <div class="upload-label">Перетащите файл или кликните</div>
       <div class="upload-hint">MP3, MP4, M4A, WAV, OGG, WebM · до 25 МБ</div>
@@ -748,7 +748,7 @@ function downloadAnalyzerDiagnostics() {
           <div class="result-block-label">
             <span>Ключевые мысли — редактируемо</span>
             <span style="display:flex;gap:6px">
-              <button class="export-btn" onclick="generateInsightsForCurrent()">Сгенерировать выжимку</button>
+              <button class="export-btn" onclick="QuizEditor.generate(currentResult?.slug||'',currentTranscript,currentResult?.title||'')">Создать квиз по этому занятию</button><button class="export-btn" onclick="generateInsightsForCurrent()">Сгенерировать выжимку</button>
               <button class="export-btn" onclick="addInsightRow('current-insights-list')">+ Мысль вручную</button>
             </span>
           </div>
@@ -1512,6 +1512,7 @@ ${slugInstruction}
       showResult(card, transcript, currentTimecodes);
       addToDict(); // сразу в словарь, с полным транскриптом — вручную жать не нужно
       await editorialStartCurrent();
+      if(document.getElementById("make-knowledge-quiz")?.checked)await QuizEditor.generate(card.slug||"",currentTranscript,card.title||"");
       window.AnalyzerDiagnostics.record('analysis_end',{outcome:'success'});
 
     } catch(err) {
@@ -3903,7 +3904,7 @@ ${tcList}
           <div class="note" id="lib-status-${l.slug}"></div>
           <div id="lib-insights-${l.slug}"></div>
           <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn btn-sm" onclick="generateLibInsights('${l.slug}')">${hasInsights ? 'Перегенерировать' : 'Сгенерировать'}</button>
+            <button class="btn btn-sm" onclick="QuizEditor.generate(${jsArg(l.slug)})">Создать квиз</button><button class="btn btn-sm" onclick="generateLibInsights('${l.slug}')">${hasInsights ? 'Перегенерировать' : 'Сгенерировать'}</button>
             <button class="btn btn-sm" onclick="addInsightRow('lib-insights-${l.slug}')">+ Мысль вручную</button>
             <button class="btn-primary" style="flex:1" onclick="saveLibInsights('${l.slug}')">Сохранить в базу</button>
           </div>
@@ -6275,6 +6276,6 @@ function editorialAllEdits(){return Array.from(document.querySelectorAll('.edito
 async function saveEditorialReview(){if(!editorialDraft)return;try{editorialDraft=await editorialApi('/drafts/'+editorialDraft.id+'/review','POST',{ideas:editorialAllEdits(),source_checked:document.getElementById('editorial-source-checked').checked});editorialMessage('Правки сохранены в черновике. Выжимка в приложении не изменена.');}catch(e){editorialMessage(e.message);}}
 
 </script>
-</body>
+<script src="quiz-editor.js?v=1"></script><script>QuizEditor.init({base:()=>API_URL,token:()=>ADMIN_TOKEN});</script></body>
 </html>
 
