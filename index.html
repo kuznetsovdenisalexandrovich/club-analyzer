@@ -6193,6 +6193,7 @@ async function loadEditorialDraft(id) {
   try{editorialDraft=await editorialApi('/drafts/'+encodeURIComponent(id));editorialRender();}catch(e){editorialMessage(e.message);}
 }
 async function analyzeMetadataCoverage(key, segments, transcript, caption, slug, progress) {
+  if(!segments.length)throw new Error('Распознавание не вернуло временные метки. Расшифровка сохранена в текущей вкладке; точное оглавление без меток не создаётся.');
   const rows=segments.length?segments.map((s,id)=>({id,time:fmtTime(s.start),text:String(s.text||'')})):[{id:0,time:'',text:transcript}];
   const parts=[];let group=[],size=0;
   for(const row of rows){if(group.length&&size+row.text.length>6000){parts.push(group);group=[];size=0;}group.push(row);size+=row.text.length;}
